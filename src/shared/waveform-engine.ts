@@ -58,15 +58,22 @@ export function drawMirroredSpectrumBars(
     const bx = x + b * (barWidth + barGap);
     const fftIdx = Math.floor((b / numBars) * halfLen);
     const ampNorm = (fftData[fftIdx] / 255);
-    const h = Math.max(3, ampNorm * maxHeight);
+    const safeAmp = Number.isFinite(ampNorm) ? ampNorm : 0;
+    const h = Math.max(3, safeAmp * maxHeight);
+    const topY = centerY - h;
+    const botY = centerY + h;
 
-    const grad = ctx.createLinearGradient(bx, centerY - h, bx, centerY + h);
+    if (!Number.isFinite(bx) || !Number.isFinite(topY) || !Number.isFinite(botY)) {
+      continue;
+    }
+
+    const grad = ctx.createLinearGradient(bx, topY, bx, botY);
     grad.addColorStop(0, colorTop);
     grad.addColorStop(0.5, colorBottom);
     grad.addColorStop(1, 'rgba(0,0,0,0.4)');
 
     ctx.fillStyle = grad;
-    ctx.fillRect(bx, centerY - h, barWidth, h * 2);
+    ctx.fillRect(bx, topY, barWidth, h * 2);
   }
 }
 

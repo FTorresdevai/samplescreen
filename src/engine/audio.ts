@@ -1,4 +1,5 @@
-import { AudioAnalysis, ParsedMidi } from '../types';
+import { AudioAnalysis, ParsedMidi, VisualizerSettings } from '../types';
+import { TimelineTiming } from './midi';
 
 export class AudioManager {
   private ctx: AudioContext | null = null;
@@ -12,6 +13,7 @@ export class AudioManager {
   private isPlayingState = false;
   private loopEndTime: number | null = null;
   private isLooping = true;
+  private hasCustomFile = false;
 
   private fftData: Uint8Array<ArrayBuffer> = new Uint8Array(new ArrayBuffer(1024));
   private waveformData: Uint8Array<ArrayBuffer> = new Uint8Array(new ArrayBuffer(1024));
@@ -48,17 +50,27 @@ export class AudioManager {
     }
   }
 
+  public getContext(): AudioContext | null {
+    this.init();
+    return this.ctx;
+  }
+
+  public isCustomAudio(): boolean {
+    return this.hasCustomFile;
+  }
+
   public async loadAudioFile(file: File): Promise<AudioBuffer> {
     this.init();
     const arrayBuffer = await file.arrayBuffer();
     const decoded = await this.ctx!.decodeAudioData(arrayBuffer);
+    this.hasCustomFile = true;
     this.originalRawBuffer = decoded;
     this.setBuffer(decoded);
     return decoded;
   }
 
   public setBuffer(decoded: AudioBuffer) {
-    if (!this.originalRawBuffer) {
+    if (this.hasCustomFile || !this.originalRawBuffer) {
       this.originalRawBuffer = decoded;
     }
     this.buffer = decoded;
@@ -347,12 +359,13 @@ export class AudioManager {
    * Deterministic Offline Analysis at any exact timestamp.
    * Crucial for 60 FPS offline export without audio glitch or frame drop!
    */
-  public getOfflineAnalysis(time: number): AudioAnalysis {
-    if (!this.buffer || !this.channelDataLeft) {
+  public getOfflineAnalysis(time: number, customBuffer?: AudioBuffer | null): AudioAnalysis {
+    const activeBuf = customBuffer || this.buffer;
+    if (!activeBuf) {
       return this.getRealtimeAnalysis();
     }
 
-    const sampleRate = this.buffer.sampleRate;
+    const sampleRate = activeBuf.sampleRate;
     const centerSample = Math.floor(time * sampleRate);
     const windowSize = 2048;
     const halfWindow = windowSize / 2;
@@ -364,30 +377,38 @@ export class AudioManager {
     let midApprox = 0;
     let trebleApprox = 0;
 
-    const left = this.channelDataLeft;
-    const right = this.channelDataRight || left;
+    const left = customBuffer ? customBuffer.getChannelData(0) : this.channelDataLeft!;
+    const right = (customBuffer && customBuffer.numberOfChannels > 1)
+      ? customBuffer.getChannelData(1)
+      : (this.channelDataRight || left);
 
     for (let i = 0; i < 1024; i++) {
       const idx = startSample + i * 2;
       let val = 0;
       if (idx < left.length) {
-        val = (left[idx] + right[idx]) * 0.5;
+        const raw = (left[idx] + right[idx]) * 0.5;
+        val = Number.isFinite(raw) ? raw : 0;
       }
       tempWave[i] = Math.max(0, Math.min(255, Math.floor((val + 1) * 127.5)));
       sumSquares += val * val;
 
       // Approximate frequency energy through simple gradient & diff
       if (i > 1) {
-        const diff = Math.abs(val - ((left[idx - 2] + right[idx - 2]) * 0.5));
-        trebleApprox += diff;
+        const prev = (left[idx - 2] + right[idx - 2]) * 0.5;
+        const diff = Math.abs(val - (Number.isFinite(prev) ? prev : 0));
+        trebleApprox += Number.isFinite(diff) ? diff : 0;
       }
       bassApprox += Math.abs(val);
     }
 
-    const rms = Math.min(1, Math.sqrt(sumSquares / 1024) * 2.5);
-    const bass = Math.min(1, (bassApprox / 1024) * 2.8);
-    const treble = Math.min(1, (trebleApprox / 1024) * 4.0);
-    const mid = Math.min(1, (rms + bass * 0.4 + treble * 0.4) * 0.8);
+    const safeSumSquares = Number.isFinite(sumSquares) ? sumSquares : 0;
+    const safeBassApprox = Number.isFinite(bassApprox) ? bassApprox : 0;
+    const safeTrebleApprox = Number.isFinite(trebleApprox) ? trebleApprox : 0;
+
+    const rms = Math.min(1, Math.sqrt(safeSumSquares / 1024) * 2.5) || 0;
+    const bass = Math.min(1, (safeBassApprox / 1024) * 2.8) || 0;
+    const treble = Math.min(1, (safeTrebleApprox / 1024) * 4.0) || 0;
+    const mid = Math.min(1, (rms + bass * 0.4 + treble * 0.4) * 0.8) || 0;
 
     // Synthesize pseudo-FFT bins for visualization during offline frame rendering
     const pseudoFFT = this.reusableOfflineFFT;
@@ -397,8 +418,10 @@ export class AudioManager {
       else if (i < 150) weight = mid * 180;
       else weight = treble * 140;
 
-      const noise = (Math.sin(i * 12.3 + time * 40) + 1) * 0.2;
-      pseudoFFT[i] = Math.max(0, Math.min(255, Math.floor(weight * (0.8 + noise))));
+      const safeTime = Number.isFinite(time) ? time : 0;
+      const noise = (Math.sin(i * 12.3 + safeTime * 40) + 1) * 0.2;
+      const binVal = Math.floor(weight * (0.8 + noise));
+      pseudoFFT[i] = Math.max(0, Math.min(255, Number.isFinite(binVal) ? binVal : 0));
     }
 
     return {
@@ -641,6 +664,143 @@ export class AudioManager {
 
     this.setBuffer(buffer);
     return buffer;
+  }
+
+  /**
+   * Pre-slices and renders an exact, cut-to-size AudioBuffer for the exported video.
+   * Completely solves the issue of extensive uncut audio samples, ensuring that:
+   * 1. Total duration matches the video down to the exact sample.
+   * 2. Loops repeat seamlessly if exportLoops > 1.
+   * 3. Trim start bar is respected.
+   * 4. Intro section is seamlessly prepended if enabled.
+   * 5. Zero CPU overhead during frame encoding.
+   */
+  public prepareExportAudioBuffer(
+    timing: TimelineTiming,
+    settings: VisualizerSettings,
+    introMidi?: ParsedMidi | null,
+    mainMidi?: ParsedMidi | null
+  ): AudioBuffer | null {
+    this.init();
+    if (!this.ctx) return null;
+
+    const { hasIntro, introDuration, mainLoopDuration, secondsPerBar } = timing;
+    const exportLoops = Math.max(1, settings.exportLoops || 1);
+    const totalDuration = introDuration + mainLoopDuration * exportLoops;
+    if (totalDuration <= 0) return null;
+
+    // Use raw uploaded sample if available, or current buffer
+    const source = this.originalRawBuffer || this.buffer;
+    if (!source) {
+      if (mainMidi) {
+        return this.generateCombinedAudioBuffer(
+          hasIntro ? (introMidi || null) : null,
+          mainMidi,
+          hasIntro,
+          timing.introBars
+        );
+      }
+      return null;
+    }
+
+    const sampleRate = source.sampleRate;
+    const totalSamples = Math.max(1, Math.round(totalDuration * sampleRate));
+    const target = this.ctx.createBuffer(2, totalSamples, sampleRate);
+    const outL = target.getChannelData(0);
+    const outR = target.getChannelData(1);
+
+    const srcL = source.getChannelData(0);
+    const srcR = source.numberOfChannels > 1 ? source.getChannelData(1) : srcL;
+
+    const isCustomSample = this.hasCustomFile;
+
+    if (isCustomSample) {
+      const srcBuffer = settings.isAudioTrimmed ? (this.buffer || source) : (this.originalRawBuffer || source);
+      const curSrcL = srcBuffer.getChannelData(0);
+      const curSrcR = srcBuffer.numberOfChannels > 1 ? srcBuffer.getChannelData(1) : curSrcL;
+
+      const startBar = Math.max(1, settings.audioTrimStartBar || 1);
+      const startSec = settings.isAudioTrimmed ? 0 : (startBar - 1) * secondsPerBar;
+      const startSample = Math.round(startSec * sampleRate);
+      const loopSamples = Math.round(mainLoopDuration * sampleRate);
+      const introSamples = (hasIntro && introDuration > 0) ? Math.round(introDuration * sampleRate) : 0;
+
+      // 1. Handle Intro (Guaranteed non-silent even if startSample < introSamples)
+      if (hasIntro && introSamples > 0) {
+        if (startSample >= introSamples) {
+          const preDropStart = startSample - introSamples;
+          for (let i = 0; i < introSamples; i++) {
+            const idx = (preDropStart + i) % curSrcL.length;
+            outL[i] = curSrcL[idx];
+            outR[i] = curSrcR[idx];
+          }
+        } else {
+          // Prepend from start of sample with smooth riser swell into the drop
+          for (let i = 0; i < introSamples; i++) {
+            const idx = i % curSrcL.length;
+            const env = 0.45 + 0.55 * (i / introSamples);
+            outL[i] = curSrcL[idx] * env;
+            outR[i] = curSrcR[idx] * env;
+          }
+        }
+      }
+
+      // 2. Fill Main Loop (repeat exportLoops times)
+      for (let l = 0; l < exportLoops; l++) {
+        const loopOffset = introSamples + l * loopSamples;
+        for (let i = 0; i < loopSamples; i++) {
+          const outIdx = loopOffset + i;
+          if (outIdx >= totalSamples) break;
+          const srcIdx = (startSample + i) % curSrcL.length;
+          outL[outIdx] = curSrcL[srcIdx];
+          outR[outIdx] = curSrcR[srcIdx];
+        }
+      }
+    } else {
+      // Generated demo synth audio: generate exact intro + main drop progression
+      const demoBuffer = this.generateCombinedAudioBuffer(
+        hasIntro ? (introMidi || null) : null,
+        mainMidi || { notes: [], totalBars: 8, duration: 16, bpm: 80 },
+        hasIntro,
+        timing.introBars
+      );
+      const dL = demoBuffer.getChannelData(0);
+      const dR = demoBuffer.numberOfChannels > 1 ? demoBuffer.getChannelData(1) : dL;
+
+      const introSamples = (hasIntro && introDuration > 0) ? Math.round(introDuration * sampleRate) : 0;
+      const loopSamples = Math.round(mainLoopDuration * sampleRate);
+
+      // Copy Intro once
+      for (let i = 0; i < introSamples && i < totalSamples; i++) {
+        outL[i] = dL[i % dL.length];
+        outR[i] = dR[i % dR.length];
+      }
+
+      // Copy Main loop (repeat exportLoops times)
+      for (let l = 0; l < exportLoops; l++) {
+        const loopOffset = introSamples + l * loopSamples;
+        for (let i = 0; i < loopSamples; i++) {
+          const outIdx = loopOffset + i;
+          if (outIdx >= totalSamples) break;
+          const srcIdx = (introSamples + (i % Math.max(1, dL.length - introSamples))) % dL.length;
+          outL[outIdx] = dL[srcIdx];
+          outR[outIdx] = dR[srcIdx];
+        }
+      }
+    }
+
+    // 3. 25ms Anti-click micro fade out at the very end
+    const fadeSamples = Math.round(sampleRate * 0.025);
+    for (let f = 0; f < fadeSamples; f++) {
+      const idx = totalSamples - 1 - f;
+      if (idx >= 0) {
+        const gain = f / fadeSamples;
+        outL[idx] *= gain;
+        outR[idx] *= gain;
+      }
+    }
+
+    return target;
   }
 }
 

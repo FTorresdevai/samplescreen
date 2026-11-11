@@ -107,6 +107,7 @@ export const App: React.FC = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
   const [exportDownloadUrl, setExportDownloadUrl] = useState<string | null>(null);
+  const [exportExtension, setExportExtension] = useState<'mp4' | 'webm'>('mp4');
   const [exportError, setExportError] = useState<string | null>(null);
 
   // Initialize Demo Loop on mount with 16 bars
@@ -375,6 +376,7 @@ export const App: React.FC = () => {
         introMidiData
       );
 
+      setExportExtension(blob.type.includes('webm') ? 'webm' : 'mp4');
       const url = URL.createObjectURL(blob);
       setExportDownloadUrl(url);
       setIsExporting(false);
@@ -397,7 +399,7 @@ export const App: React.FC = () => {
     revokeExportUrl();
   };
 
-  const exportFileName = `SampleScreen_${settings.title.replace(/\s+/g, '_')}_1080x1920_60FPS.mp4`;
+  const exportFileName = `SampleScreen_${settings.title.replace(/\s+/g, '_')}_1080x1920_60FPS.${exportExtension}`;
 
   // Total playback duration calculation for the timeline scrubber and audio sync
   const timelineTiming = getTimelineTiming(midiData, introMidiData, settings);
@@ -463,6 +465,7 @@ export const App: React.FC = () => {
             introMidiData={introMidiData}
             settings={settings}
             onUpdateSettings={handleUpdateSettings}
+            isExporting={isExporting}
           />
 
           {/* Bottom Playback Controls */}

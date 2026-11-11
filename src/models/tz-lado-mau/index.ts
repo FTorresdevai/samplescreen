@@ -305,26 +305,29 @@ export function drawTzLadoMauModel(ctx: CanvasRenderingContext2D, context: Model
       const isActive = relStart <= 0 && relEnd >= 0;
 
       if (isActive) {
-        const activeTailH = Math.min(waterfallH, relEnd * noteSpeed);
+        const safeRelEnd = Number.isFinite(relEnd) ? relEnd : 0;
+        const activeTailH = Math.max(0, Math.min(waterfallH, safeRelEnd * noteSpeed));
         const activeTopY = strikeLineY - activeTailH;
 
-        // Molten Magma / Fiery Orange Gradient Body
-        const magmaGrad = ctx.createLinearGradient(noteLeft, activeTopY, noteLeft, strikeLineY);
-        magmaGrad.addColorStop(0, '#881200');
-        magmaGrad.addColorStop(0.4, '#e03b00');
-        magmaGrad.addColorStop(0.85, '#ff6600');
-        magmaGrad.addColorStop(1, '#ffffff');
+        if (Number.isFinite(noteLeft) && Number.isFinite(activeTopY) && Number.isFinite(strikeLineY)) {
+          // Molten Magma / Fiery Orange Gradient Body
+          const magmaGrad = ctx.createLinearGradient(noteLeft, activeTopY, noteLeft, strikeLineY);
+          magmaGrad.addColorStop(0, '#881200');
+          magmaGrad.addColorStop(0.4, '#e03b00');
+          magmaGrad.addColorStop(0.85, '#ff6600');
+          magmaGrad.addColorStop(1, '#ffffff');
 
-        ctx.save();
-        ctx.fillStyle = magmaGrad;
-        ctx.shadowColor = '#ff4500';
-        ctx.shadowBlur = 18 * (settings.glowIntensity || 1.2);
-        roundRect(ctx, noteLeft, activeTopY, noteW, activeTailH, noteR, true, false);
+          ctx.save();
+          ctx.fillStyle = magmaGrad;
+          ctx.shadowColor = '#ff4500';
+          ctx.shadowBlur = 18 * (settings.glowIntensity || 1.2);
+          roundRect(ctx, noteLeft, activeTopY, noteW, activeTailH, noteR, true, false);
 
-        ctx.strokeStyle = '#ffe4cc';
-        ctx.lineWidth = 1.4;
-        roundRect(ctx, noteLeft, activeTopY, noteW, activeTailH, noteR, false, true);
-        ctx.restore();
+          ctx.strokeStyle = '#ffe4cc';
+          ctx.lineWidth = 1.4;
+          roundRect(ctx, noteLeft, activeTopY, noteW, activeTailH, noteR, false, true);
+          ctx.restore();
+        }
 
         // Hammer Impact Fiery Flare
         ctx.save();
@@ -623,7 +626,9 @@ function drawSeismicMagmaWaveform(
   }
 
   // Magma Plasma Gradient Fill
-  const magmaFillGrad = ctx.createLinearGradient(0, centerY - maxAmp, 0, centerY + maxAmp);
+  const safeMaxAmp = Number.isFinite(maxAmp) ? Math.max(1, maxAmp) : 50;
+  const safeCenterY = Number.isFinite(centerY) ? centerY : y + h / 2;
+  const magmaFillGrad = ctx.createLinearGradient(0, safeCenterY - safeMaxAmp, 0, safeCenterY + safeMaxAmp);
   magmaFillGrad.addColorStop(0, 'rgba(254, 215, 170, 0.95)');
   magmaFillGrad.addColorStop(0.2, 'rgba(249, 115, 22, 0.75)');
   magmaFillGrad.addColorStop(0.5, 'rgba(185, 28, 28, 0.35)');

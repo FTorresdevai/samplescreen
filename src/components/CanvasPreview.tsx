@@ -14,6 +14,7 @@ interface CanvasPreviewProps {
   introMidiData?: ParsedMidi | null;
   settings: VisualizerSettings;
   onUpdateSettings: (updates: Partial<VisualizerSettings>) => void;
+  isExporting?: boolean;
 }
 
 export const CanvasPreview: React.FC<CanvasPreviewProps> = ({
@@ -24,6 +25,7 @@ export const CanvasPreview: React.FC<CanvasPreviewProps> = ({
   introMidiData,
   settings,
   onUpdateSettings,
+  isExporting = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -52,24 +54,25 @@ export const CanvasPreview: React.FC<CanvasPreviewProps> = ({
     return buildUnifiedTimelineMidi(midiData, introMidiData || null, settings);
   }, [midiData, introMidiData, settings.enableIntro, settings.introBars, settings.bpm, settings.exportLoops]);
 
-  // Main 60 FPS Animation loop for real-time preview with seamless unified timeline and intro awareness
+  // Main 60 FPS Animation loop for real-time preview with seamless unified timeline and intro awareness.
+  // Pauses rendering while an export is actively generating frames to free GPU/CPU bandwidth.
   useEffect(() => {
     let animId: number;
 
     const loop = () => {
-      if (rendererRef.current) {
+      if (!isExporting && rendererRef.current) {
         const currentTime = audioManager.getCurrentTime();
         const analysis = audioManager.getRealtimeAnalysis();
 
-        const { loopTime, timingInfo } = calculateFrameProgress(currentTime, timing, settings, unifiedMidi);
-        rendererRef.current.render(loopTime, unifiedMidi, analysis, settings, timingInfo);
+        const { timingInfo } = calculateFrameProgress(currentTime, timing, settings, unifiedMidi);
+        rendererRef.current.render(currentTime, unifiedMidi, analysis, settings, timingInfo);
       }
       animId = requestAnimationFrame(loop);
     };
 
     animId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(animId);
-  }, [rendererRef, audioManager, unifiedMidi, timing, settings]);
+  }, [rendererRef, audioManager, unifiedMidi, timing, settings, isExporting]);
 
   const toggleFullscreen = () => {
     if (!containerRef.current) return;

@@ -362,25 +362,28 @@ export function drawTakeCareModel(ctx: CanvasRenderingContext2D, context: ModelD
 
         if (isActive) {
           // ACTIVE NOTE: Striking the piano with molten gold illumination!
-          const activeTailH = Math.min(waterfallH, relEnd * noteSpeed);
+          const safeRelEnd = Number.isFinite(relEnd) ? relEnd : 0;
+          const activeTailH = Math.max(0, Math.min(waterfallH, safeRelEnd * noteSpeed));
           const activeTopY = strikeLineY - activeTailH;
 
-          const goldNoteGrad = ctx.createLinearGradient(noteLeft, activeTopY, noteLeft, strikeLineY);
-          goldNoteGrad.addColorStop(0, '#b45309');
-          goldNoteGrad.addColorStop(0.4, '#eab308');
-          goldNoteGrad.addColorStop(0.85, '#fde047');
-          goldNoteGrad.addColorStop(1, '#ffffff');
+          if (Number.isFinite(noteLeft) && Number.isFinite(activeTopY) && Number.isFinite(strikeLineY)) {
+            const goldNoteGrad = ctx.createLinearGradient(noteLeft, activeTopY, noteLeft, strikeLineY);
+            goldNoteGrad.addColorStop(0, '#b45309');
+            goldNoteGrad.addColorStop(0.4, '#eab308');
+            goldNoteGrad.addColorStop(0.85, '#fde047');
+            goldNoteGrad.addColorStop(1, '#ffffff');
 
-          ctx.save();
-          ctx.fillStyle = goldNoteGrad;
-          ctx.shadowColor = '#f59e0b';
-          ctx.shadowBlur = 16 * (settings.glowIntensity || 1.2);
-          roundRect(ctx, noteLeft, activeTopY, noteW, activeTailH, noteR, true, false);
+            ctx.save();
+            ctx.fillStyle = goldNoteGrad;
+            ctx.shadowColor = '#f59e0b';
+            ctx.shadowBlur = 16 * (settings.glowIntensity || 1.2);
+            roundRect(ctx, noteLeft, activeTopY, noteW, activeTailH, noteR, true, false);
 
-          ctx.strokeStyle = '#fffbeb';
-          ctx.lineWidth = 1.4;
-          roundRect(ctx, noteLeft, activeTopY, noteW, activeTailH, noteR, false, true);
-          ctx.restore();
+            ctx.strokeStyle = '#fffbeb';
+            ctx.lineWidth = 1.4;
+            roundRect(ctx, noteLeft, activeTopY, noteW, activeTailH, noteR, false, true);
+            ctx.restore();
+          }
 
           // Hammer Impact Starburst Flare at Key Strike Line
           ctx.save();
@@ -706,7 +709,9 @@ function drawLiquidGoldWaveform(
   }
 
   // Draw Liquid Gold Metallic Gradient Body
-  const goldFillGrad = ctx.createLinearGradient(0, centerY - maxAmp, 0, centerY + maxAmp);
+  const safeMaxAmp = Number.isFinite(maxAmp) ? Math.max(1, maxAmp) : 50;
+  const safeCenterY = Number.isFinite(centerY) ? centerY : y + h / 2;
+  const goldFillGrad = ctx.createLinearGradient(0, safeCenterY - safeMaxAmp, 0, safeCenterY + safeMaxAmp);
   goldFillGrad.addColorStop(0, 'rgba(254, 240, 138, 0.95)');
   goldFillGrad.addColorStop(0.25, 'rgba(245, 158, 11, 0.75)');
   goldFillGrad.addColorStop(0.5, 'rgba(180, 83, 9, 0.3)');

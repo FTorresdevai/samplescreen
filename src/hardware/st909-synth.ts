@@ -126,7 +126,9 @@ function drawVerticalFader(
   glowColor: string
 ) {
   ctx.save();
-  const actualVal = isDynamic ? Math.max(0, Math.min(1, dynamicVal)) : val;
+  const safeDynamic = Number.isFinite(dynamicVal) ? dynamicVal : 0;
+  const safeVal = Number.isFinite(val) ? val : 0.5;
+  const actualVal = isDynamic ? Math.max(0, Math.min(1, safeDynamic)) : safeVal;
 
   // Fader slot track (recessed groove)
   const slotW = 5;
@@ -173,13 +175,15 @@ function drawVerticalFader(
   ctx.shadowOffsetY = 2;
 
   // Ribbed metallic cap body
-  const capGrad = ctx.createLinearGradient(capX, capY, capX + capW, capY);
-  capGrad.addColorStop(0, '#555864');
-  capGrad.addColorStop(0.35, '#828795');
-  capGrad.addColorStop(0.7, '#474a56');
-  capGrad.addColorStop(1, '#2c2e36');
-  ctx.fillStyle = capGrad;
-  roundRect(ctx, capX, capY, capW, capH, 2, true, false);
+  if (Number.isFinite(capX) && Number.isFinite(capY)) {
+    const capGrad = ctx.createLinearGradient(capX, capY, capX + capW, capY);
+    capGrad.addColorStop(0, '#555864');
+    capGrad.addColorStop(0.35, '#828795');
+    capGrad.addColorStop(0.7, '#474a56');
+    capGrad.addColorStop(1, '#2c2e36');
+    ctx.fillStyle = capGrad;
+    roundRect(ctx, capX, capY, capW, capH, 2, true, false);
+  }
   ctx.shadowBlur = 0;
   ctx.shadowOffsetY = 0;
 

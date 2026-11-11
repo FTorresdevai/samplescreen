@@ -258,15 +258,22 @@ export function drawVintageWingUprightPiano(
 
         // Calculate vertical position: notes fall downwards into the fallboard (y = waterfallY + waterfallH)
         const hitY = waterfallY + waterfallH;
-        const ny = hitY - (timeToHit / windowSecs) * waterfallH;
-        const nh = Math.max(6, (note.duration / windowSecs) * waterfallH);
+        const safeTimeToHit = Number.isFinite(timeToHit) ? timeToHit : 0;
+        const safeDur = Number.isFinite(note.duration) ? note.duration : 0.5;
+        const ny = hitY - (safeTimeToHit / windowSecs) * waterfallH;
+        const nh = Math.max(6, (safeDur / windowSecs) * waterfallH);
+        const topY = ny - nh;
 
-        const isStriking = timeToHit <= 0 && timeToHit >= -note.duration;
+        if (!Number.isFinite(nx) || !Number.isFinite(topY) || !Number.isFinite(ny)) {
+          return;
+        }
+
+        const isStriking = timeToHit <= 0 && timeToHit >= -safeDur;
 
         ctx.save();
         if (isStriking) {
           // Molten White-Gold when actively striking
-          const strikeGrad = ctx.createLinearGradient(nx, ny - nh, nx, ny);
+          const strikeGrad = ctx.createLinearGradient(nx, topY, nx, ny);
           strikeGrad.addColorStop(0, '#fef08a');
           strikeGrad.addColorStop(0.5, '#ffffff');
           strikeGrad.addColorStop(1, '#fde047');
@@ -275,14 +282,14 @@ export function drawVintageWingUprightPiano(
           ctx.shadowBlur = 14;
         } else {
           // Warm Antique Gold for pending notes
-          const noteGrad = ctx.createLinearGradient(nx, ny - nh, nx, ny);
+          const noteGrad = ctx.createLinearGradient(nx, topY, nx, ny);
           noteGrad.addColorStop(0, 'rgba(212, 175, 55, 0.45)');
           noteGrad.addColorStop(1, 'rgba(253, 224, 71, 0.85)');
           ctx.fillStyle = noteGrad;
         }
 
         // Draw note bar with rounded top
-        roundRect(ctx, nx, ny - nh, nw, nh, 2.5, true, false);
+        roundRect(ctx, nx, topY, nw, nh, 2.5, true, false);
         ctx.restore();
       }
     });
