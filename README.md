@@ -1,7 +1,63 @@
 # SampleScreen 🎛️⚡
 ### High-Impact Audio & MIDI Vertical Video Visualizer (1080×1920 @ 60 FPS)
 
-> A production-grade, optimized client-side competitor to loopvisualizer.app tailored for Instagram Reels, TikTok, and YouTube Shorts.
+> A production-grade, highly optimized client-side competitor to loopvisualizer.app tailored for Instagram Reels, TikTok, and YouTube Shorts.
+
+---
+
+## 🔒 Repository Governance & Protection Policy
+
+> [!IMPORTANT]
+> **STRICT MAIN BRANCH LOCKDOWN:**
+> The `main` branch represents production. Direct pushes to `main` are strictly prohibited.
+> **Only the repository owner ([@FTorresdevai](https://github.com/FTorresdevai) / Francisco) has authority to approve and merge Pull Requests into `main`.**
+> Any pull request that modifies shared core files outside isolated slots or fails the automated CI build will be automatically rejected.
+
+### Contribution Flow (How to Submit Work):
+1. **Never commit directly to `main`**: All work must happen on a feature or fix branch.
+   ```bash
+   git checkout -b feature/my-new-screen
+   # or
+   git checkout -b fix/audio-latency
+   ```
+2. **Verify your build locally**: Ensure TypeScript and Vite pass with zero warnings or errors:
+   ```bash
+   npm run build
+   ```
+3. **Open a Pull Request against `main`**:
+   - Fill out the PR template completely.
+   - Attach screenshot or video proof of your screen/fix running at native 1080×1920 @ 60 FPS.
+   - Link the relevant GitHub Issue (`Closes #<issue_number>`).
+4. **Automated CI Validation**: GitHub Actions will automatically compile TypeScript and run `npm run build` on your PR.
+5. **Francisco's Review & Merge**: Once approved by Francisco, your PR is squashed and merged into `main`.
+
+---
+
+## 📋 Issues, Proof-of-Bug Reporting & Ideas Dashboard
+
+We use GitHub Issues and the GitHub Project Dashboard to organize all work, track bug fixes with hard proof, and curate new screen ideas.
+
+### 1. Reporting Bugs (With Mandatory Evidence)
+To prevent phantom issues and guarantee rapid resolution, **all bug reports require direct visual proof**:
+- **Open a Bug Report** using the [Bug Report Template](.github/ISSUE_TEMPLATE/bug_report.md).
+- **Mandatory Attachments**:
+  - Drag-and-drop a **screenshot** or **screen recording (`.mp4` / `.mov`)** showing the exact visual bug, export freeze, or UI misalignment.
+  - Paste any red error stack traces from the browser console (`F12` or `Cmd + Option + I` -> **Console** tab).
+- **Provide Environment Specs**: Browser (Chrome/Safari/Firefox), OS (macOS/Windows), and whether you used a custom WAV/MP3 or MIDI file.
+- *Issues submitted without proof or reproduction steps will be closed immediately.*
+
+### 2. Proposing New Screens & Visual Models
+Have an idea for a new artist album theme (e.g. Travis Scott, Pink Floyd, Daft Punk) or a classic hardware synth (e.g. Moog, Roland Juno, Prophet)?
+- **Open a Screen Proposal** using the [Screen Idea Template](.github/ISSUE_TEMPLATE/screen_idea.md).
+- Include visual moodboard images, reference album art, target colors, and audio-reactivity behavior (bass bloom, spectrum rays, waterfall styling).
+
+### 3. Project Kanban Workflow & Completion
+All tasks move through the project board:
+```text
+[Backlog / Ideas] ──> [In Progress] ──> [In Review (PR Open)] ──> [Done (Merged by Francisco)]
+```
+- **Claiming an Issue:** Comment on the issue requesting assignment before starting work.
+- **Marking as Complete:** In your PR description, include `Closes #<id>` (e.g. `Closes #14`). When Francisco approves and merges your PR, the linked issue is automatically closed and moved to **Done**.
 
 ---
 
@@ -19,7 +75,7 @@ npm run build
 ```
 
 To access the **Developer Mockups Lab**:
-```
+```text
 http://localhost:3000/#mockups
 # or deep-link to any model:
 http://localhost:3000/?model=take-care
@@ -35,6 +91,7 @@ http://localhost:3000/?model=tz-lado-mau&waveform=true
 - **MIDI Engine**: `@tonejs/midi` (note extraction, pitch mapping, automatic BPM and Key signature detection)
 - **Visual Engine**: HTML5 Canvas running at native internal **1080×1920 resolution** with a deterministic frame-by-frame render clock
 - **Export Engine**: Client-side browser export using **WebCodecs API** (`VideoEncoder` + `AudioEncoder`) with **mp4-muxer** (producing zero-frame-drop 1080×1920 @ 60 FPS MP4 with synchronized AAC audio) and universal `MediaRecorder` fallback. Zero server or cloud rendering costs.
+- **In-Browser Beat Trimmer**: Mathematical bar-based sample slicing with BPM synchronization (`(60 / BPM) * 4` seconds per bar) allowing producers to crop and loop audio directly in the browser without opening a DAW.
 
 ---
 
@@ -60,13 +117,24 @@ The Canvas runs at internal native **1080×1920 resolution** (9:16 vertical vide
 │  • Supports Dual Mode: MIDI Piano Roll vs Pure Audio Waveform          │
 ├────────────────────────────────────────────────────────────────────────┤
 │  BOTTOM BAR & TELEMETRY (y: 1465 to 1920)                              │
-│  Active Playing Notes · Chord Detection · Watermark                    │
+│  Active Playing Notes · Chord Detection · Bar Dashes · Watermark       │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-> [!IMPORTANT]
+> [!CAUTION]
 > **The Golden Rule for Collaborators:**
-> Never modify coordinates or add conditional branching in `src/engine/renderer.ts`, `src/engine/exporter.ts`, or `src/engine/audio.ts`. All new contributions must live isolated inside their own folder/file and conform to their designated bounding box slot.
+> **NEVER** modify coordinates or add conditional branching in `src/engine/renderer.ts`, `src/engine/exporter.ts`, or `src/engine/audio.ts`. All new contributions must live isolated inside their own folder/file and conform to their designated bounding box slot.
+
+---
+
+## ✂️ In-Browser Beat Trimmer (BPM Snapped)
+
+When producers upload a full beat or sample, they do not need to open FL Studio, Ableton, or Logic to crop it. The site features a built-in mathematical bar trimmer:
+- **BPM-Snapped Calculations**: Slices audio precisely to bar boundaries based on `(60 / BPM) * 4`.
+- **Start Bar Selection**: Pick the starting bar (Bar 1, 5, 9, 13, 17, 25, 33...) via range slider or numeric stepper.
+- **Loop Length Presets**: Select 4, 8, 12, or 16 bars.
+- **Slice Preview**: Displays exact time range (`00:16.0 → 00:32.0 (16.0s)`).
+- **Instant Non-Destructive Slicing**: Slices the memory buffer, updates playback timeline, loops, and exports at 60 FPS with zero re-rendering delays. Original audio is preserved for one-click resets.
 
 ---
 
@@ -87,7 +155,8 @@ In `src/models/my-new-visual/index.ts`, export your drawing function matching `M
 ```typescript
 import { ModelDrawContext } from '../../types';
 import { roundRect } from '../../shared/canvas-utils';
-import { drawMirroredSpectrumBars, drawOscilloscopeBeam } from '../../shared/waveform-engine';
+import { drawMirroredSpectrumBars } from '../../shared/waveform-engine';
+import { formatNoteName } from '../../engine/chords';
 
 export function drawMyNewVisualModel(ctx: CanvasRenderingContext2D, context: ModelDrawContext) {
   const { region, currentTime, duration, midi, activeNotes, analysis, settings, isWaveformMode } = context;
@@ -120,8 +189,16 @@ export function drawMyNewVisualModel(ctx: CanvasRenderingContext2D, context: Mod
     // MIDI / Piano Roll View (When MIDI notes exist)
     // -------------------------------------------------------------
     activeNotes.forEach(note => {
-      // Draw your reactive particles, notes, or visual elements here
+      // Draw reactive particles, rings, or visual elements here
     });
+
+    // Optional: Draw note name tags if settings.noteNameTags !== false
+    if (settings.noteNameTags !== false && activeNotes.length > 0) {
+      activeNotes.forEach(note => {
+        const name = formatNoteName(note.midi, settings.accidental, settings.middleC);
+        // Render note badge...
+      });
+    }
   }
 
   ctx.restore();
@@ -129,7 +206,7 @@ export function drawMyNewVisualModel(ctx: CanvasRenderingContext2D, context: Mod
 ```
 
 ### Step 3: Register in `src/models/registry.ts`
-Add 2 entries to `src/models/registry.ts`:
+Add entries to `src/models/registry.ts`:
 
 ```typescript
 // 1. Import your function
@@ -234,7 +311,8 @@ To maintain a clean codebase where multiple contributors and agents work concurr
 1. **Shared Primitives Only from `src/shared/`**:
    - `src/shared/canvas-utils.ts` – Pure canvas geometry (e.g., `roundRect`).
    - `src/shared/waveform-engine.ts` – Standard audio visualization beams, spectrum bars, and scopes.
-   - `src/hardware/keyboard-engine.ts` – Standard 3-octave / 2-octave piano keyboard layout calculations.
+   - `src/hardware/keyboard-engine.ts` – Standard piano keyboard layout calculations.
+   - `src/engine/chords.ts` – Standard note formatting (`formatNoteName`) and chord detection (`detectChord`).
    - **Never import internal helper functions directly from another model's directory or another synth's file.**
 
 2. **Asset Caching Rule (60 FPS Performance)**:
@@ -245,6 +323,23 @@ To maintain a clean codebase where multiple contributors and agents work concurr
 3. **No Dynamic Layout Mutations**:
    - Do not adjust global variables, canvas dimensions (`1080×1920`), or the heights of adjacent slots.
    - Always stay strictly within `region.x`, `region.y`, `region.width`, and `region.height`.
+
+---
+
+## 🛡️ GitHub Repository Security Setup (For Francisco / Admin)
+
+To enforce this protection policy on the GitHub web interface:
+
+1. Go to **Repository Settings** -> **Branches**.
+2. Click **Add branch ruleset** or **Add branch protection rule**.
+3. Set **Branch name pattern** to `main`.
+4. Enable the following protections:
+   - ✅ **Require a pull request before merging** (Require 1 approval).
+   - ✅ **Require status checks to pass before merging** (Search and select the `Type Check & Production Build` check from our GitHub Actions workflow).
+   - ✅ **Require branches to be up to date before merging**.
+   - ✅ **Require conversation resolution before merging**.
+   - ✅ **Do not allow bypassing the above settings** (or restrict bypass to Repository Admin only).
+5. Click **Create** / **Save Changes**.
 
 ---
 
