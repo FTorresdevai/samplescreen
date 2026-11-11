@@ -24,13 +24,15 @@ export interface ColorPalette {
   glowColor: string;
 }
 
-export type ActiveVisualModel =
+export type BuiltinVisualModel =
   | 'linear'
   | 'circular'
   | 'take-care'
   | 'tz-lado-mau'
   | 'orbital-moon'
   | 'aureola';
+
+export type ActiveVisualModel = BuiltinVisualModel | (string & {});
 
 export interface VisualizerSettings {
   // Direct Text Editing

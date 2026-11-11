@@ -8,7 +8,7 @@ import { drawAureolaModel } from './aureola';
 
 export type ModelDrawFn = (ctx: CanvasRenderingContext2D, context: ModelDrawContext) => void;
 
-export const MODEL_REGISTRY: Record<ActiveVisualModel, ModelDrawFn> = {
+export const MODEL_REGISTRY: Record<string, ModelDrawFn> = {
   'linear': drawLinearModel,
   'circular': drawCircularModel,
   'take-care': drawTakeCareModel,
@@ -64,6 +64,6 @@ export const VISUAL_MODELS_MANIFEST: VisualModelManifest[] = [
   },
 ];
 
-export function getModelRenderer(mode: ActiveVisualModel): ModelDrawFn {
+export function getModelRenderer(mode: string): ModelDrawFn {
   return MODEL_REGISTRY[mode] || MODEL_REGISTRY['linear'];
 }
