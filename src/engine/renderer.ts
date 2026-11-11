@@ -1,6 +1,6 @@
 import { AudioAnalysis, MidiNote, ParsedMidi, VisualizerSettings, TimingInfo, ModelRegion, ModelDrawContext, SynthRegion } from '../types';
 import { hexToRgb, hexToRgbaStr } from './palettes';
-import { formatNoteName } from './chords';
+import { formatNoteName, detectChord } from './chords';
 import { getModelRenderer } from '../models/registry';
 import { getSynthRenderer } from '../hardware/registry';
 import { roundRect } from '../shared/canvas-utils';
@@ -304,74 +304,89 @@ export class CanvasRenderer {
     ctx.save();
 
     const isWaveform = !!settings.waveformMode;
+    const showNotesRow = settings.showChord !== false;
 
-    if (isWaveform) {
-      // In Waveform Mode: Audio spectrum readout instead of piano MIDI notes
-      ctx.font = '800 22px "JetBrains Mono", monospace';
-      ctx.letterSpacing = '2.5px';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = '#ffffff';
-      ctx.shadowColor = settings.glowColor || '#f59e0b';
-      ctx.shadowBlur = 10;
-      ctx.fillText('AUDIO WAVEFORM  •  MASTER STEREO', centerX, notesY);
-      ctx.shadowBlur = 0;
-      ctx.letterSpacing = '0px';
-    } else {
-      // In Piano / MIDI Mode: Prominent Row of Active Piano Notes: "G2 • A2 • C3 • E3"
-      const noteNames = activeNotes.map(n => formatNoteName(n.midi, settings.accidental, settings.middleC));
-
-      if (noteNames.length > 0) {
-        ctx.font = '900 34px "Inter", sans-serif';
+    if (showNotesRow) {
+      if (isWaveform) {
+        // In Waveform Mode: Audio spectrum readout instead of piano MIDI notes
+        ctx.font = '800 22px "JetBrains Mono", monospace';
+        ctx.letterSpacing = '2.5px';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-
-        const fullText = noteNames.join('  •  ');
         ctx.fillStyle = '#ffffff';
-        ctx.shadowColor = '#fde047';
-        ctx.shadowBlur = 14;
-        ctx.fillText(fullText, centerX, notesY);
+        ctx.shadowColor = settings.glowColor || '#f59e0b';
+        ctx.shadowBlur = 10;
+        ctx.fillText('AUDIO WAVEFORM  •  MASTER STEREO', centerX, notesY);
         ctx.shadowBlur = 0;
+        ctx.letterSpacing = '0px';
       } else {
-        ctx.font = '800 24px "JetBrains Mono", monospace';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#64748b';
-        ctx.fillText('—', centerX, notesY);
+        // In Piano / MIDI Mode: Prominent Row of Active Piano Notes and optional Chord Symbol
+        const noteNames = activeNotes.map(n => formatNoteName(n.midi, settings.accidental, settings.middleC));
+
+        if (noteNames.length > 0) {
+          ctx.font = '900 34px "Inter", sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+
+          // Detect chord symbol if enabled (e.g. Cm7)
+          let chordPrefix = '';
+          if (settings.showChordSymbol) {
+            const detected = detectChord(activeNotes, settings.accidental, settings.middleC);
+            if (detected?.symbol) {
+              chordPrefix = `${detected.symbol}  •  `;
+            }
+          }
+
+          const fullText = chordPrefix + noteNames.join('  •  ');
+          ctx.fillStyle = '#ffffff';
+          ctx.shadowColor = '#fde047';
+          ctx.shadowBlur = 14;
+          ctx.fillText(fullText, centerX, notesY);
+          ctx.shadowBlur = 0;
+        } else {
+          ctx.font = '800 24px "JetBrains Mono", monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = '#64748b';
+          ctx.fillText('—', centerX, notesY);
+        }
       }
     }
 
     // 2. Bar Progress Dashes (e.g. 10 dashes, active dash illuminated in gold)
+    const showDashes = settings.showProgressDashes !== false;
     const dashesY = notesY + 54;
     const bpm = settings.bpm || midi.bpm || 80;
     const secondsPerBar = (60 / bpm) * 4;
     const totalBars = Math.max(1, Math.round(duration / secondsPerBar)) || 10;
     const currentBarIdx = Math.floor(loopTime / secondsPerBar) % totalBars;
 
-    const dashW = 18;
-    const dashH = 3;
-    const dashGap = 10;
-    const totalDashesW = totalBars * dashW + (totalBars - 1) * dashGap;
-    const startDashX = centerX - totalDashesW / 2;
+    if (showDashes) {
+      const dashW = 18;
+      const dashH = 3;
+      const dashGap = 10;
+      const totalDashesW = totalBars * dashW + (totalBars - 1) * dashGap;
+      const startDashX = centerX - totalDashesW / 2;
 
-    for (let b = 0; b < totalBars; b++) {
-      const dx = startDashX + b * (dashW + dashGap);
-      const isCur = b === currentBarIdx;
+      for (let b = 0; b < totalBars; b++) {
+        const dx = startDashX + b * (dashW + dashGap);
+        const isCur = b === currentBarIdx;
 
-      if (isCur) {
-        ctx.fillStyle = '#fde047';
-        ctx.shadowColor = '#f59e0b';
-        ctx.shadowBlur = 8;
-        roundRect(ctx, dx, dashesY - dashH / 2, dashW, dashH, 1.5, true, false);
-        ctx.shadowBlur = 0;
-      } else {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
-        roundRect(ctx, dx, dashesY - dashH / 2, dashW, dashH, 1.5, true, false);
+        if (isCur) {
+          ctx.fillStyle = '#fde047';
+          ctx.shadowColor = '#f59e0b';
+          ctx.shadowBlur = 8;
+          roundRect(ctx, dx, dashesY - dashH / 2, dashW, dashH, 1.5, true, false);
+          ctx.shadowBlur = 0;
+        } else {
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
+          roundRect(ctx, dx, dashesY - dashH / 2, dashW, dashH, 1.5, true, false);
+        }
       }
     }
 
     // 3. Studio Watermark: "samplescreen visualizer • 1080x1920 @ 60 fps"
-    const wmY = dashesY + 44;
+    const wmY = showDashes ? dashesY + 44 : notesY + 44;
     ctx.font = '700 11.5px "JetBrains Mono", monospace';
     ctx.letterSpacing = '1.2px';
     ctx.textAlign = 'center';

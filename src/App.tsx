@@ -212,17 +212,60 @@ export const App: React.FC = () => {
       const decoded = await audioManager.loadAudioFile(file);
       setAudioFileName(file.name);
       setAudioDuration(decoded.duration);
-      const timing = getTimelineTiming(midiData, introMidiData, settings);
-      audioManager.setLoopEndTime(timing.totalDuration);
+
+      const bpm = settings.bpm || 80;
+      const secondsPerBar = (60 / bpm) * 4;
+      const totalBars = Math.max(1, Math.round(decoded.duration / secondsPerBar));
+      const defaultBars = Math.min(16, totalBars);
 
       // Auto-toggle Waveform Mode if producer has not loaded a custom MIDI yet
-      if (!midiFileName || midiFileName.startsWith('demo_')) {
-        setSettings((prev) => ({ ...prev, waveformMode: true }));
-      }
+      setSettings((prev) => ({
+        ...prev,
+        audioTrimStartBar: 1,
+        audioTrimBars: defaultBars,
+        loopBars: defaultBars,
+        isAudioTrimmed: false,
+        waveformMode: (!midiFileName || midiFileName.startsWith('demo_')) ? true : prev.waveformMode,
+      }));
+
+      const timing = getTimelineTiming(midiData, introMidiData, { ...settings, loopBars: defaultBars });
+      audioManager.setLoopEndTime(timing.totalDuration);
     } catch (err) {
       console.error('Failed to decode audio file:', err);
       alert('Unable to decode audio file. Please ensure it is a valid WAV or MP3 file.');
     }
+  };
+
+  const handleTrimAudio = (startBar: number, numBars: number) => {
+    const result = audioManager.trimToBars(startBar, numBars, settings.bpm);
+    if (result) {
+      setAudioDuration(result.durationSec);
+      setSettings((prev) => ({
+        ...prev,
+        audioTrimStartBar: startBar,
+        audioTrimBars: result.totalBars,
+        loopBars: result.totalBars,
+        isAudioTrimmed: true,
+      }));
+      audioManager.setLoopEndTime(result.durationSec);
+    }
+  };
+
+  const handleResetAudioTrim = () => {
+    const originalDur = audioManager.resetTrim();
+    setAudioDuration(originalDur);
+    const bpm = settings.bpm || 80;
+    const secondsPerBar = (60 / bpm) * 4;
+    const recoveredBars = Math.max(1, Math.round(originalDur / secondsPerBar));
+    const defaultBars = Math.min(16, recoveredBars);
+    setSettings((prev) => ({
+      ...prev,
+      audioTrimStartBar: 1,
+      audioTrimBars: defaultBars,
+      loopBars: defaultBars,
+      isAudioTrimmed: false,
+    }));
+    audioManager.setLoopEndTime(originalDur);
   };
 
   const handleMidiSelected = async (file: File) => {
@@ -446,6 +489,9 @@ export const App: React.FC = () => {
           onLoadDemoIntro={handleLoadDemoIntro}
           midiData={midiData}
           audioDuration={audioDuration || audioManager.getDuration()}
+          rawAudioDuration={audioManager.getRawDuration() || audioDuration}
+          onTrimAudio={handleTrimAudio}
+          onResetAudioTrim={handleResetAudioTrim}
         />
 
       </div>

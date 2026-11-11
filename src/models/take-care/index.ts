@@ -40,7 +40,7 @@ if (typeof window !== 'undefined') {
 export function drawTakeCareModel(ctx: CanvasRenderingContext2D, context: ModelDrawContext) {
   loadAssets();
 
-  const { region, currentTime, duration, midi, activeNotes, analysis, settings, introInfo } = context;
+  const { region, currentTime, loopTime, duration, midi, activeNotes, analysis, settings, introInfo } = context;
   const { x, y, width: w, height: h } = region;
 
   ctx.save();
@@ -308,6 +308,8 @@ export function drawTakeCareModel(ctx: CanvasRenderingContext2D, context: ModelD
     ctx.rect(x + 4, waterfallY, w - 8, waterfallH);
     ctx.clip();
 
+    const effectiveTime = typeof loopTime === 'number' && !isNaN(loopTime) ? loopTime : (currentTime % loopDuration);
+
     allNotes.forEach(note => {
       let candidateOffsets: number[] = [0];
 
@@ -318,21 +320,21 @@ export function drawTakeCareModel(ctx: CanvasRenderingContext2D, context: ModelD
           if (note.time < introDuration) {
             candidateOffsets = [0];
           } else {
-            const timeInMain = Math.max(0, currentTime - introDuration);
+            const timeInMain = Math.max(0, effectiveTime - introDuration);
             const mainProgress = timeInMain % mainLoopDuration;
             candidateOffsets = [0];
             if (mainProgress > mainLoopDuration - lookaheadSec) {
               candidateOffsets.push(1);
             }
-            if (timeInMain >= mainLoopDuration && mainProgress < lookaheadSec) {
+            if (mainProgress < lookaheadSec) {
               candidateOffsets.push(-1);
             }
           }
         }
       } else {
-        const currentLoopTime = currentTime % loopDuration;
+        const currentLoopTime = effectiveTime % loopDuration;
         if (currentLoopTime > loopDuration - lookaheadSec) candidateOffsets.push(1);
-        if (currentTime >= loopDuration && currentLoopTime < lookaheadSec) candidateOffsets.push(-1);
+        if (currentLoopTime < lookaheadSec) candidateOffsets.push(-1);
       }
 
       candidateOffsets.forEach(k => {
@@ -343,7 +345,7 @@ export function drawTakeCareModel(ctx: CanvasRenderingContext2D, context: ModelD
           noteStartLoop = note.time + k * loopDuration;
         }
 
-        const relStart = noteStartLoop - currentTime;
+        const relStart = noteStartLoop - effectiveTime;
         const relEnd = relStart + note.duration;
 
         // Skip notes completely out of waterfall temporal window
@@ -398,7 +400,7 @@ export function drawTakeCareModel(ctx: CanvasRenderingContext2D, context: ModelD
           ctx.restore();
 
           // Active Note Head Badge (Clear note identification at strike line)
-          if (settings.noteNameTags !== false && activeTailH > 22) {
+          if (settings.noteNameTags !== false) {
             ctx.save();
             ctx.font = '800 10.5px "JetBrains Mono", monospace';
             const tm = ctx.measureText(noteName);

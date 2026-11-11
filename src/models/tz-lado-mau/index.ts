@@ -30,7 +30,7 @@ if (typeof window !== 'undefined') {
 export function drawTzLadoMauModel(ctx: CanvasRenderingContext2D, context: ModelDrawContext) {
   loadAssets();
 
-  const { region, currentTime, duration, midi, activeNotes, analysis, settings, introInfo } = context;
+  const { region, currentTime, loopTime, duration, midi, activeNotes, analysis, settings, introInfo } = context;
   const { x, y, width: w, height: h } = region;
 
   ctx.save();
@@ -266,19 +266,21 @@ export function drawTzLadoMauModel(ctx: CanvasRenderingContext2D, context: Model
   ctx.rect(x + 4, waterfallY, w - 8, waterfallH);
   ctx.clip();
 
+  const effectiveTime = typeof loopTime === 'number' && !isNaN(loopTime) ? loopTime : (currentTime % loopDuration);
+
   allNotes.forEach(note => {
     let candidateOffsets: number[] = [0];
     if (hasIntro) {
       if (!isIntro && note.time >= introDuration) {
-        const timeInMain = Math.max(0, currentTime - introDuration);
+        const timeInMain = Math.max(0, effectiveTime - introDuration);
         const mainProgress = timeInMain % mainLoopDuration;
         if (mainProgress > mainLoopDuration - lookaheadSec) candidateOffsets.push(1);
-        if (timeInMain >= mainLoopDuration && mainProgress < lookaheadSec) candidateOffsets.push(-1);
+        if (mainProgress < lookaheadSec) candidateOffsets.push(-1);
       }
     } else {
-      const currentLoopTime = currentTime % loopDuration;
+      const currentLoopTime = effectiveTime % loopDuration;
       if (currentLoopTime > loopDuration - lookaheadSec) candidateOffsets.push(1);
-      if (currentTime >= loopDuration && currentLoopTime < lookaheadSec) candidateOffsets.push(-1);
+      if (currentLoopTime < lookaheadSec) candidateOffsets.push(-1);
     }
 
     candidateOffsets.forEach(k => {
@@ -289,7 +291,7 @@ export function drawTzLadoMauModel(ctx: CanvasRenderingContext2D, context: Model
         noteStartLoop = note.time + k * loopDuration;
       }
 
-      const relStart = noteStartLoop - currentTime;
+      const relStart = noteStartLoop - effectiveTime;
       const relEnd = relStart + note.duration;
       if (relEnd < 0 || relStart > lookaheadSec) return;
 
@@ -342,7 +344,7 @@ export function drawTzLadoMauModel(ctx: CanvasRenderingContext2D, context: Model
         ctx.restore();
 
         // Note Name Badge
-        if (settings.noteNameTags !== false && activeTailH > 22) {
+        if (settings.noteNameTags !== false) {
           ctx.save();
           ctx.font = '800 10.5px "JetBrains Mono", monospace';
           const tm = ctx.measureText(noteName);

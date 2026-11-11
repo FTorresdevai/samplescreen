@@ -102,6 +102,7 @@ export class VideoExporter {
         height: 1920,
       },
       fastStart: 'in-memory',
+      firstTimestampBehavior: 'offset',
     };
 
     if (audioBuffer && typeof window.AudioEncoder === 'function') {
@@ -156,10 +157,21 @@ export class VideoExporter {
       }
     }
 
-    // Initialize VideoEncoder
+    // Initialize VideoEncoder with robust error tracking
+    let encoderError: Error | null = null;
     const videoEncoder = new VideoEncoder({
-      output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-      error: (e) => console.error('VideoEncoder error:', e),
+      output: (chunk, meta) => {
+        try {
+          muxer.addVideoChunk(chunk, meta);
+        } catch (muxErr) {
+          console.error('Muxer addVideoChunk error:', muxErr);
+          encoderError = muxErr instanceof Error ? muxErr : new Error(String(muxErr));
+        }
+      },
+      error: (e) => {
+        console.error('VideoEncoder error:', e);
+        encoderError = e instanceof Error ? e : new Error(String(e));
+      },
     });
 
     videoEncoder.configure({
@@ -168,6 +180,7 @@ export class VideoExporter {
       height: 1920,
       bitrate: 10_000_000,
       framerate: fps,
+      avc: { format: 'avc' },
     });
 
     if (hasAudio && audioBuffer) {
@@ -190,8 +203,11 @@ export class VideoExporter {
 
         // Encode audio buffer deterministically into AAC chunks matching exact video duration
         await this.encodeAudioBuffer(audioBuffer, audioEncoder, numberOfChannels, sampleRate, duration, settings.exportLoops || 1);
-        await audioEncoder.flush();
-        audioEncoder.close();
+        await Promise.race([
+          audioEncoder.flush(),
+          new Promise((resolve) => setTimeout(resolve, 2500))
+        ]);
+        try { audioEncoder.close(); } catch {}
         audioEncoder = null; // Cleaned up
         console.log(`Audio encoding complete! Total AAC chunks muxed: ${audioChunksCount}`);
       } catch (audioErr) {
@@ -223,10 +239,15 @@ export class VideoExporter {
       if (this.isCancelled) {
         throw new Error('Export cancelled by user');
       }
+      if (encoderError) {
+        throw encoderError;
+      }
 
       // Safe non-blocking queue throttle: only pause if GPU queue is backed up
-      if (videoEncoder.encodeQueueSize > 25) {
-        await new Promise((r) => setTimeout(r, 8));
+      while (videoEncoder.encodeQueueSize > 20) {
+        if (this.isCancelled) throw new Error('Export cancelled by user');
+        if (encoderError) throw encoderError;
+        await new Promise((r) => setTimeout(r, 6));
       }
 
       const currentTime = frameIndex / fps;
@@ -247,8 +268,8 @@ export class VideoExporter {
       videoEncoder.encode(videoFrame, { keyFrame: frameIndex % 120 === 0 });
       videoFrame.close();
 
-      // Report progress periodically (every 8 frames gives smooth UI without slowing GPU encoding)
-      if (frameIndex % 8 === 0 || frameIndex === totalFrames - 1) {
+      // Report progress periodically (every 4 frames gives smooth UI and lets GPU encode breathe)
+      if (frameIndex % 4 === 0 || frameIndex === totalFrames - 1) {
         const elapsedSecs = (performance.now() - startTime) / 1000;
         const currentSpeed = frameIndex / Math.max(0.01, elapsedSecs);
         const remainingFrames = totalFrames - frameIndex;
@@ -258,7 +279,7 @@ export class VideoExporter {
           currentFrame: frameIndex + 1,
           totalFrames,
           percent: Math.min(99, Math.round(((frameIndex + 1) / totalFrames) * 100)),
-          fps: Math.round(currentSpeed),
+          fps: Math.round(currentSpeed) || 60,
           etaSeconds: Math.ceil(eta),
           status: 'Rendering & Encoding frames at 60 FPS...',
         });
@@ -277,8 +298,11 @@ export class VideoExporter {
       status: 'Finalizing MP4 container...',
     });
 
-    await videoEncoder.flush();
-    videoEncoder.close();
+    await Promise.race([
+      videoEncoder.flush(),
+      new Promise((resolve) => setTimeout(resolve, 5000))
+    ]);
+    try { videoEncoder.close(); } catch {}
 
     if (audioEncoder) {
       await audioEncoder.flush();

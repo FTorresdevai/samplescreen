@@ -1,5 +1,7 @@
 import { ModelDrawContext } from '../../types';
 import { hexToRgbaStr } from '../../engine/palettes';
+import { formatNoteName } from '../../engine/chords';
+import { roundRect } from '../../shared/canvas-utils';
 
 export function drawCircularModel(ctx: CanvasRenderingContext2D, context: ModelDrawContext) {
   const { region, loopTime, duration, midi, analysis, settings, isWaveformMode } = context;
@@ -108,6 +110,34 @@ export function drawCircularModel(ctx: CanvasRenderingContext2D, context: ModelD
     ctx.lineTo(cx + Math.cos(playheadAngle) * radius, cy + Math.sin(playheadAngle) * radius);
     ctx.stroke();
     ctx.restore();
+
+    // Floating Note Name Tags along the rotating playhead needle
+    if (settings.noteNameTags !== false && context.activeNotes && context.activeNotes.length > 0) {
+      context.activeNotes.forEach(note => {
+        const pitchNorm = (note.midi - 36) / 48;
+        const noteR = radius * (0.45 + Math.max(0, Math.min(1, pitchNorm)) * 0.45);
+        const tagX = cx + Math.cos(playheadAngle) * noteR + Math.cos(playheadAngle + Math.PI / 2) * 16;
+        const tagY = cy + Math.sin(playheadAngle) * noteR + Math.sin(playheadAngle + Math.PI / 2) * 16;
+        const noteName = formatNoteName(note.midi, settings.accidental, settings.middleC);
+
+        ctx.save();
+        ctx.font = '800 10.5px "JetBrains Mono", monospace';
+        const tm = ctx.measureText(noteName);
+        const tagW = tm.width + 8;
+        const tagH = 16;
+
+        ctx.fillStyle = '#fde047';
+        ctx.shadowColor = '#f59e0b';
+        ctx.shadowBlur = 8;
+        roundRect(ctx, tagX - tagW / 2, tagY - tagH / 2, tagW, tagH, 3, true, false);
+
+        ctx.fillStyle = '#0a0502';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(noteName, tagX, tagY);
+        ctx.restore();
+      });
+    }
   }
 
   ctx.restore();

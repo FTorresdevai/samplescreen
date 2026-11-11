@@ -2,6 +2,7 @@ import { ModelDrawContext } from '../../types';
 import { formatNoteName } from '../../engine/chords';
 import { hexToRgbaStr } from '../../engine/palettes';
 import { drawMirroredSpectrumBars, drawOscilloscopeBeam } from '../../shared/waveform-engine';
+import { roundRect } from '../../shared/canvas-utils';
 
 export function drawLinearModel(ctx: CanvasRenderingContext2D, context: ModelDrawContext) {
   const { region, loopTime, duration, midi, activeNotes, analysis, settings, isWaveformMode } = context;
@@ -117,6 +118,33 @@ export function drawLinearModel(ctx: CanvasRenderingContext2D, context: ModelDra
     ctx.lineTo(playheadX, y + h);
     ctx.stroke();
     ctx.restore();
+
+    // Floating Note Name Tags next to the cursor/needle
+    if (settings.noteNameTags !== false && activeNotes && activeNotes.length > 0) {
+      activeNotes.forEach(note => {
+        const pitchNorm = (note.midi - minMidi) / pitchSpan;
+        const tagY = y + h - 30 - pitchNorm * (h - 60);
+        const noteName = formatNoteName(note.midi, settings.accidental, settings.middleC);
+
+        ctx.save();
+        ctx.font = '800 11px "JetBrains Mono", monospace';
+        const tm = ctx.measureText(noteName);
+        const tagW = tm.width + 10;
+        const tagH = 18;
+        const tagX = playheadX + 8;
+
+        ctx.fillStyle = '#fde047';
+        ctx.shadowColor = '#f59e0b';
+        ctx.shadowBlur = 8;
+        roundRect(ctx, tagX, tagY - tagH / 2, tagW, tagH, 3.5, true, false);
+
+        ctx.fillStyle = '#0a0502';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(noteName, tagX + tagW / 2, tagY);
+        ctx.restore();
+      });
+    }
   }
 
   ctx.restore();

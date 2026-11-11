@@ -87,6 +87,11 @@ export interface VisualizerSettings {
   audioSensitivity: number; // 0.5 - 2.5
   glowIntensity: number;    // 0.2 - 2.5
 
+  // Audio Trim / Beat Slicing Feature (Direct in-browser bar trimmer)
+  audioTrimStartBar?: number; // Starting bar (1-based, e.g. Bar 1, 5, 9)
+  audioTrimBars?: number;     // Number of bars to loop (e.g. 4, 8, 16)
+  isAudioTrimmed?: boolean;
+
   // Export Tools
   exportLoops: 1 | 2 | 4;
 }

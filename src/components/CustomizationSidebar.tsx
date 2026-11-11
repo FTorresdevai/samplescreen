@@ -16,7 +16,10 @@ import {
   Eye,
   Sliders,
   Settings2,
-  Tv
+  Tv,
+  Scissors,
+  RotateCcw,
+  Check
 } from 'lucide-react';
 import { VisualizerSettings, ParsedMidi } from '../types';
 import { PALETTES } from '../engine/palettes';
@@ -30,10 +33,13 @@ interface CustomizationSidebarProps {
   onExport: () => void;
   midiData?: ParsedMidi | null;
   audioDuration?: number;
+  rawAudioDuration?: number;
   introMidiData?: ParsedMidi | null;
   introMidiFileName?: string | null;
   onIntroMidiSelected?: (file: File) => void;
   onLoadDemoIntro?: () => void;
+  onTrimAudio?: (startBar: number, numBars: number) => void;
+  onResetAudioTrim?: () => void;
 }
 
 export const CustomizationSidebar: React.FC<CustomizationSidebarProps> = ({
@@ -44,10 +50,13 @@ export const CustomizationSidebar: React.FC<CustomizationSidebarProps> = ({
   onExport,
   midiData,
   audioDuration,
+  rawAudioDuration,
   introMidiData: _introMidiData,
   introMidiFileName,
   onIntroMidiSelected,
   onLoadDemoIntro,
+  onTrimAudio,
+  onResetAudioTrim,
 }) => {
   // Resizable sidebar state
   const [sidebarWidth, setSidebarWidth] = useState<number>(390);
@@ -109,6 +118,27 @@ export const CustomizationSidebar: React.FC<CustomizationSidebarProps> = ({
     { name: 'Sage Green', hex: '#10b981', accent: '#6ee7b7', circle: '#1c2e24', bg: '#0e1713' },
     { name: 'Amethyst', hex: '#a855f7', accent: '#f0abfc', circle: '#291b3b', bg: '#140c1e' },
   ];
+
+  // Trimmer calculations
+  const bpm = settings.bpm || 80;
+  const secondsPerBar = (60 / bpm) * 4;
+  const effectiveRawDuration = rawAudioDuration || audioDuration || 0;
+  const totalAvailableBars = effectiveRawDuration > 0
+    ? Math.max(1, Math.floor(effectiveRawDuration / secondsPerBar))
+    : 16;
+
+  const currentStartBar = Math.max(1, Math.min(settings.audioTrimStartBar || 1, totalAvailableBars));
+  const currentBars = Math.max(1, Math.min(settings.audioTrimBars || 16, Math.max(1, totalAvailableBars - currentStartBar + 1)));
+
+  const trimStartTime = (currentStartBar - 1) * secondsPerBar;
+  const trimDurationTime = currentBars * secondsPerBar;
+  const trimEndTime = Math.min(effectiveRawDuration || (trimStartTime + trimDurationTime), trimStartTime + trimDurationTime);
+
+  const formatMinSec = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = (sec % 60).toFixed(1);
+    return `${m}:${s.padStart(4, '0')}`;
+  };
 
   return (
     <aside
@@ -224,6 +254,136 @@ export const CustomizationSidebar: React.FC<CustomizationSidebarProps> = ({
               ? 'Full-stage audio waveform visualizer. Piano keyboard and MIDI waterfall are completely removed.'
               : 'Displays cascading MIDI note waterfall streaming onto the physical concert keyboard.'}
           </p>
+        </section>
+
+        {/* ============================================================== */}
+        {/* BEAT / AUDIO TRIMMER (BPM SNAPPED BY BARS)                    */}
+        {/* ============================================================== */}
+        <section className="space-y-3 p-3 bg-[#0c0e14] border border-amber-500/30 rounded-xl shadow-inner">
+          <div className="flex items-center justify-between text-[10px] font-mono font-bold tracking-widest text-zinc-400 uppercase">
+            <span className="flex items-center gap-1.5 text-white">
+              <Scissors className="w-3.5 h-3.5 text-amber-400" />
+              BEAT TRIMMER (BPM SNAPPED)
+            </span>
+            {settings.isAudioTrimmed ? (
+              <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/30 flex items-center gap-1">
+                <Check className="w-2.5 h-2.5" /> TRIMMED
+              </span>
+            ) : (
+              <span className="text-zinc-500 font-mono text-[10px]">FULL AUDIO</span>
+            )}
+          </div>
+
+          <p className="text-[10px] text-zinc-400 leading-tight">
+            Slice and loop beat bars snapped directly to <strong className="text-amber-300 font-mono">{bpm} BPM</strong> in your browser without opening a DAW.
+          </p>
+
+          {/* Audio metrics badge */}
+          <div className="grid grid-cols-2 gap-2 p-2 bg-black/40 rounded-lg border border-white/[0.06] text-[11px] font-mono">
+            <div>
+              <span className="text-zinc-500 block text-[9px]">SOURCE BEAT</span>
+              <span className="text-zinc-200 font-bold">{effectiveRawDuration > 0 ? `${effectiveRawDuration.toFixed(1)}s` : 'Demo Synth'} ({totalAvailableBars} bars)</span>
+            </div>
+            <div>
+              <span className="text-zinc-500 block text-[9px]">BAR DURATION</span>
+              <span className="text-zinc-200 font-bold">{secondsPerBar.toFixed(2)}s / bar</span>
+            </div>
+          </div>
+
+          {/* Start Bar Stepper / Slider */}
+          <div>
+            <div className="flex items-center justify-between text-xs text-zinc-400 mb-1.5">
+              <span>Start at Bar:</span>
+              <span className="font-mono text-amber-400 font-bold">Bar {currentStartBar} ({formatMinSec(trimStartTime)})</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min={1}
+                max={Math.max(1, totalAvailableBars)}
+                value={currentStartBar}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value) || 1;
+                  onUpdate({ audioTrimStartBar: val });
+                }}
+                className="flex-1 h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+              />
+              <input
+                type="number"
+                min={1}
+                max={totalAvailableBars}
+                value={currentStartBar}
+                onChange={(e) => {
+                  const val = Math.max(1, Math.min(totalAvailableBars, parseInt(e.target.value) || 1));
+                  onUpdate({ audioTrimStartBar: val });
+                }}
+                className="w-14 bg-[#141721] border border-white/[0.08] rounded px-2 py-1 text-xs font-mono font-bold text-center text-white"
+              />
+            </div>
+          </div>
+
+          {/* Quick Start Bar Presets */}
+          <div className="flex items-center gap-1 flex-wrap">
+            {[1, 5, 9, 13, 17, 25, 33].filter(b => b <= totalAvailableBars).map(barNum => (
+              <button
+                key={barNum}
+                onClick={() => onUpdate({ audioTrimStartBar: barNum })}
+                className={`px-2 py-1 rounded text-[10px] font-mono font-bold transition ${
+                  currentStartBar === barNum
+                    ? 'bg-amber-400 text-black shadow-sm'
+                    : 'bg-zinc-900 border border-white/[0.06] text-zinc-400 hover:text-white'
+                }`}
+              >
+                Bar {barNum}
+              </button>
+            ))}
+          </div>
+
+          {/* Loop Length (Number of Bars) */}
+          <div>
+            <label className="text-xs text-zinc-400 mb-1.5 block">Loop Length (Bars)</label>
+            <div className="grid grid-cols-4 gap-1.5 bg-black/40 p-1 rounded-xl border border-white/[0.06]">
+              {([4, 8, 12, 16] as const).map(bars => (
+                <button
+                  key={bars}
+                  onClick={() => onUpdate({ audioTrimBars: bars })}
+                  className={`py-1.5 rounded-lg font-mono text-xs font-bold transition ${
+                    currentBars === bars
+                      ? 'bg-amber-500 text-black shadow-sm'
+                      : 'text-zinc-500 hover:text-zinc-300'
+                  }`}
+                >
+                  {bars} Bars
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Slice Time Range Preview */}
+          <div className="p-2 bg-amber-500/5 rounded-lg border border-amber-500/20 text-center font-mono text-[11px] text-amber-300">
+            Loop Slice: <span className="font-bold text-white">{formatMinSec(trimStartTime)} → {formatMinSec(trimEndTime)}</span> ({trimDurationTime.toFixed(1)}s • {currentBars} bars)
+          </div>
+
+          {/* Trim Action Buttons */}
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              onClick={() => onTrimAudio?.(currentStartBar, currentBars)}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg font-bold text-xs bg-amber-400 hover:bg-amber-300 text-black shadow-md shadow-amber-400/20 transition active:scale-98"
+            >
+              <Scissors className="w-3.5 h-3.5" />
+              <span>Apply Beat Trim</span>
+            </button>
+            {settings.isAudioTrimmed && (
+              <button
+                onClick={() => onResetAudioTrim?.()}
+                className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg font-mono text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-white/[0.08] transition"
+                title="Reset to Full Audio"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-zinc-400" />
+                <span>Reset</span>
+              </button>
+            )}
+          </div>
         </section>
 
         {/* ============================================================== */}

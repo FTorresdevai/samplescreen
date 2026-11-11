@@ -17,6 +17,7 @@ export class AudioManager {
   private waveformData: Uint8Array<ArrayBuffer> = new Uint8Array(new ArrayBuffer(1024));
 
   // Cached offline channel data for deterministic export
+  private originalRawBuffer: AudioBuffer | null = null;
   private channelDataLeft: Float32Array | null = null;
   private channelDataRight: Float32Array | null = null;
   private reusableOfflineWave: Uint8Array = new Uint8Array(1024);
@@ -51,15 +52,102 @@ export class AudioManager {
     this.init();
     const arrayBuffer = await file.arrayBuffer();
     const decoded = await this.ctx!.decodeAudioData(arrayBuffer);
+    this.originalRawBuffer = decoded;
     this.setBuffer(decoded);
     return decoded;
   }
 
   public setBuffer(decoded: AudioBuffer) {
+    if (!this.originalRawBuffer) {
+      this.originalRawBuffer = decoded;
+    }
     this.buffer = decoded;
     this.channelDataLeft = decoded.getChannelData(0);
     this.channelDataRight = decoded.numberOfChannels > 1 ? decoded.getChannelData(1) : this.channelDataLeft;
     this.pauseOffset = 0;
+  }
+
+  public getRawBuffer(): AudioBuffer | null {
+    return this.originalRawBuffer || this.buffer;
+  }
+
+  public getRawDuration(): number {
+    return this.originalRawBuffer ? this.originalRawBuffer.duration : (this.buffer ? this.buffer.duration : 0);
+  }
+
+  /**
+   * Cuts/trims the audio based on musical bars and BPM directly in the browser.
+   * @param startBar 1-based bar number to start the loop from (e.g. 1, 5, 9, 17)
+   * @param numBars Number of bars to loop (e.g. 4, 8, 16)
+   * @param bpm Beats Per Minute
+   */
+  public trimToBars(
+    startBar: number,
+    numBars: number,
+    bpm: number
+  ): { startSec: number; durationSec: number; totalBars: number; totalAvailableBars: number } | null {
+    const raw = this.originalRawBuffer || this.buffer;
+    if (!raw || !this.ctx) return null;
+
+    const secondsPerBar = (60 / Math.max(20, bpm || 120)) * 4;
+    const totalAvailableBars = Math.max(1, Math.floor(raw.duration / secondsPerBar));
+    const safeStartBar = Math.max(1, Math.min(startBar, totalAvailableBars));
+    const startSec = (safeStartBar - 1) * secondsPerBar;
+    const maxPossibleBars = Math.max(1, Math.floor((raw.duration - startSec) / secondsPerBar));
+    const safeNumBars = Math.max(1, Math.min(numBars, maxPossibleBars));
+    const durationSec = safeNumBars * secondsPerBar;
+
+    const sampleRate = raw.sampleRate;
+    const startSample = Math.floor(startSec * sampleRate);
+    const numSamples = Math.floor(durationSec * sampleRate);
+
+    // Create a new sliced AudioBuffer with precision
+    const trimmed = this.ctx.createBuffer(
+      raw.numberOfChannels,
+      numSamples,
+      sampleRate
+    );
+
+    for (let ch = 0; ch < raw.numberOfChannels; ch++) {
+      const srcData = raw.getChannelData(ch);
+      const dstData = trimmed.getChannelData(ch);
+      const copyLen = Math.min(numSamples, Math.max(0, srcData.length - startSample));
+      for (let i = 0; i < copyLen; i++) {
+        dstData[i] = srcData[startSample + i];
+      }
+    }
+
+    this.buffer = trimmed;
+    this.channelDataLeft = trimmed.getChannelData(0);
+    this.channelDataRight = trimmed.numberOfChannels > 1 ? trimmed.getChannelData(1) : this.channelDataLeft;
+    this.pauseOffset = 0;
+    this.loopEndTime = durationSec;
+
+    if (this.isPlayingState) {
+      this.play(0);
+    }
+
+    return {
+      startSec,
+      durationSec,
+      totalBars: safeNumBars,
+      totalAvailableBars,
+    };
+  }
+
+  public resetTrim(): number {
+    if (this.originalRawBuffer) {
+      this.buffer = this.originalRawBuffer;
+      this.channelDataLeft = this.originalRawBuffer.getChannelData(0);
+      this.channelDataRight = this.originalRawBuffer.numberOfChannels > 1 ? this.originalRawBuffer.getChannelData(1) : this.channelDataLeft;
+      this.pauseOffset = 0;
+      this.loopEndTime = this.originalRawBuffer.duration;
+      if (this.isPlayingState) {
+        this.play(0);
+      }
+      return this.originalRawBuffer.duration;
+    }
+    return this.buffer ? this.buffer.duration : 0;
   }
 
   public getBuffer(): AudioBuffer | null {
