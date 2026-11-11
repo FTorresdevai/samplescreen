@@ -98,7 +98,9 @@ export const Dropzone: React.FC<DropzoneProps> = ({
             {midiFileName && <CheckCircle2 className="w-3 h-3 text-amber-400 flex-shrink-0" />}
           </div>
           <p className="text-[10px] font-mono text-zinc-500 truncate">
-            {midiData ? `${midiData.notes.length} notes • ${midiData.totalBars} bars • ${midiData.bpm} BPM` : 'MIDI progression'}
+            {midiFileName && midiData && midiData.notes.length > 0
+              ? `${midiData.notes.length} notes • ${midiData.totalBars} bars • ${midiData.bpm} BPM`
+              : 'Optional • Leave empty for Waveform Mode'}
           </p>
         </div>
       </div>

@@ -1,24 +1,6 @@
 import { AudioAnalysis, MidiNote, ParsedMidi, VisualizerSettings } from '../types';
-import { roundRect } from './st909-synth';
-
-// Lazy loaded assets for the authentic Wing Upright Piano photo
-let wingPianoImg: HTMLImageElement | null = null;
-let isWingPianoLoaded = false;
-
-function loadWingPianoAsset() {
-  if (isWingPianoLoaded || typeof window === 'undefined') return;
-  isWingPianoLoaded = true;
-  const img = new Image();
-  img.src = '/assets/wing_upright_piano_real.jpg';
-  img.onload = () => {
-    wingPianoImg = img;
-    lastCacheKey = ''; // Invalidate offscreen cache to render photo
-  };
-}
-
-if (typeof window !== 'undefined') {
-  loadWingPianoAsset();
-}
+import { roundRect } from '../shared/canvas-utils';
+import { getCachedImage } from '../shared/assets';
 
 // Offscreen cache for the heavy static elements of the Wing Upright VST Console
 let cachedCanvas: HTMLCanvasElement | null = null;
@@ -42,9 +24,11 @@ export function drawWingUprightSynth(
   analysis: AudioAnalysis,
   settings: VisualizerSettings
 ) {
-  loadWingPianoAsset();
+  const wingPianoImg = getCachedImage('assets/wing_upright_piano_real.jpg', () => {
+    lastCacheKey = '';
+  });
 
-  const cacheKey = `${w}_${h}_${wingPianoImg?.complete ? 'loaded' : 'pending'}_${settings.isLightStudioMode ? 'light' : 'dark'}`;
+  const cacheKey = `${w}_${h}_${wingPianoImg ? 'loaded' : 'pending'}_${settings.isLightStudioMode ? 'light' : 'dark'}`;
 
   // Build / update offscreen cache for static VST frame and photo
   if (!cachedCanvas || cachedCanvas.width !== w || cachedCanvas.height !== h || lastCacheKey !== cacheKey) {
@@ -192,6 +176,7 @@ function renderStaticWingUprightVST(
   ctx.fillRect(vpX, vpY, vpW, vpH);
 
   // 7. Render Real Wing Upright Piano Photo (Without preset browser!)
+  const wingPianoImg = getCachedImage('assets/wing_upright_piano_real.jpg');
   if (wingPianoImg && wingPianoImg.complete && wingPianoImg.naturalWidth > 0) {
     const origW = wingPianoImg.naturalWidth;   // 584
     const origH = wingPianoImg.naturalHeight;  // 340

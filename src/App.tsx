@@ -5,7 +5,6 @@ import { CanvasPreview } from './components/CanvasPreview';
 import { PlaybackControls } from './components/PlaybackControls';
 import { CustomizationSidebar } from './components/CustomizationSidebar';
 import { ExportModal } from './components/ExportModal';
-import { MockupsPage } from './mockups/MockupsPage';
 import { CanvasRenderer } from './engine/renderer';
 import { audioManager } from './engine/audio';
 import { parseMidiFile, createDemoMidi, createDemoIntroMidi, getTimelineTiming } from './engine/midi';
@@ -14,25 +13,6 @@ import { ParsedMidi, VisualizerSettings } from './types';
 import { validateAudioFile, validateMidiFile, sanitizeText } from './core/validator';
 
 export const App: React.FC = () => {
-  // Developer Secret Mode for Mockups (#mockups or ?dev=mockups)
-  const [showMockupsPage, setShowMockupsPage] = useState<boolean>(() => {
-    return window.location.hash === '#mockups' || new URLSearchParams(window.location.search).get('dev') === 'mockups';
-  });
-
-  useEffect(() => {
-    const handleLocationChange = () => {
-      const isMockup = window.location.hash === '#mockups' || new URLSearchParams(window.location.search).get('dev') === 'mockups';
-      setShowMockupsPage(isMockup);
-    };
-
-    window.addEventListener('hashchange', handleLocationChange);
-    window.addEventListener('popstate', handleLocationChange);
-    return () => {
-      window.removeEventListener('hashchange', handleLocationChange);
-      window.removeEventListener('popstate', handleLocationChange);
-    };
-  }, []);
-
   // References
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rendererRef = useRef<CanvasRenderer | null>(null);
@@ -219,17 +199,36 @@ export const App: React.FC = () => {
       const totalBars = Math.max(1, Math.round(decoded.duration / secondsPerBar));
       const defaultBars = Math.min(16, totalBars);
 
-      // Auto-toggle Waveform Mode if producer has not loaded a custom MIDI yet
+      // If producer has not loaded a custom MIDI yet, clear the demo MIDI and switch to Waveform Mode
+      const isCustomMidi = midiFileName && !midiFileName.startsWith('demo_');
+      let activeMidi = midiData;
+      let activeIntro = introMidiData;
+
+      if (!isCustomMidi) {
+        activeMidi = {
+          notes: [],
+          totalBars: defaultBars,
+          bpm,
+          key: settings.key,
+          duration: decoded.duration,
+        };
+        activeIntro = null;
+        setMidiData(activeMidi);
+        setMidiFileName(null);
+        setIntroMidiData(null);
+        setIntroMidiFileName(null);
+      }
+
       setSettings((prev) => ({
         ...prev,
         audioTrimStartBar: 1,
         audioTrimBars: defaultBars,
         loopBars: defaultBars,
         isAudioTrimmed: false,
-        waveformMode: (!midiFileName || midiFileName.startsWith('demo_')) ? true : prev.waveformMode,
+        waveformMode: !isCustomMidi ? true : prev.waveformMode,
       }));
 
-      const timing = getTimelineTiming(midiData, introMidiData, { ...settings, loopBars: defaultBars });
+      const timing = getTimelineTiming(activeMidi, activeIntro, { ...settings, loopBars: defaultBars });
       audioManager.setLoopEndTime(timing.totalDuration);
     } catch (err) {
       console.error('Failed to decode audio file:', err);
@@ -410,20 +409,6 @@ export const App: React.FC = () => {
       audioManager.setLoopEndTime(totalPlaybackDuration);
     }
   }, [totalPlaybackDuration]);
-
-  if (showMockupsPage) {
-    return (
-      <MockupsPage
-        onBackToStudio={() => {
-          window.location.hash = '';
-          const url = new URL(window.location.href);
-          url.searchParams.delete('dev');
-          window.history.replaceState({}, '', url.pathname + (url.search ? url.search : '') + (url.hash ? url.hash : ''));
-          setShowMockupsPage(false);
-        }}
-      />
-    );
-  }
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#060709]">

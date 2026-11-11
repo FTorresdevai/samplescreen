@@ -59,7 +59,7 @@ export function drawMirroredSpectrumBars(
     const fftIdx = Math.floor((b / numBars) * halfLen);
     const ampNorm = (fftData[fftIdx] / 255);
     const safeAmp = Number.isFinite(ampNorm) ? ampNorm : 0;
-    const h = Math.max(3, safeAmp * maxHeight);
+    const h = Math.min(maxHeight, Math.max(3, safeAmp * maxHeight));
     const topY = centerY - h;
     const botY = centerY + h;
 

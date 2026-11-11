@@ -43,7 +43,8 @@ export function drawCircularModel(ctx: CanvasRenderingContext2D, context: ModelD
       const angle = (i / steps) * Math.PI * 2;
       const dataIdx = Math.floor((i / steps) * waveData.length);
       const amp = ((waveData[dataIdx] - 128) / 128) * (radius * 0.28) * (settings.audioSensitivity || 1.2);
-      const r = waveR + amp;
+      const clampedAmp = Math.max(-waveR * 0.45, Math.min(radius * 0.3, amp));
+      const r = waveR + clampedAmp;
       const px = cx + Math.cos(angle) * r;
       const py = cy + Math.sin(angle) * r;
       if (i === 0) ctx.moveTo(px, py);

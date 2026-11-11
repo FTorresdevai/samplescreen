@@ -1,30 +1,8 @@
 import { ModelDrawContext } from '../../types';
 import { formatNoteName, detectChord } from '../../engine/chords';
 import { hexToRgbaStr } from '../../engine/palettes';
-import { roundRect } from '../../hardware/st909-synth';
-
-// Lazy loaded assets for Take Care
-let takeCareImg: HTMLImageElement | null = null;
-let vintagePianoImg: HTMLImageElement | null = null;
-let isLoaded = false;
-
-function loadAssets() {
-  if (isLoaded || typeof window === 'undefined') return;
-  isLoaded = true;
-
-  const tc = new Image();
-  tc.src = '/assets/take_care_album.jpg';
-  tc.onload = () => { takeCareImg = tc; };
-
-  const vp = new Image();
-  vp.src = '/assets/vintage_piano.jpg';
-  vp.onload = () => { vintagePianoImg = vp; };
-}
-
-// Start loading assets immediately in browser
-if (typeof window !== 'undefined') {
-  loadAssets();
-}
+import { roundRect } from '../../shared/canvas-utils';
+import { getCachedImage } from '../../shared/assets';
 
 /**
  * Mode: "Take Care" • OVO Baroque Salon & Vintage Grand Piano Lounge
@@ -38,8 +16,6 @@ if (typeof window !== 'undefined') {
  * - Vintage Grand Piano physically seen being played: keys visibly depress and ignite with molten gold
  */
 export function drawTakeCareModel(ctx: CanvasRenderingContext2D, context: ModelDrawContext) {
-  loadAssets();
-
   const { region, currentTime, loopTime, duration, midi, activeNotes, analysis, settings, introInfo } = context;
   const { x, y, width: w, height: h } = region;
 
@@ -99,6 +75,7 @@ export function drawTakeCareModel(ctx: CanvasRenderingContext2D, context: ModelD
   const roomImgX = x + 8;
   const roomImgY = y + 8;
 
+  const takeCareImg = getCachedImage('assets/take_care_album.jpg');
   if (takeCareImg && takeCareImg.complete && takeCareImg.naturalWidth > 0) {
     ctx.save();
     // Clip to upper room rounded zone
@@ -455,6 +432,7 @@ export function drawTakeCareModel(ctx: CanvasRenderingContext2D, context: ModelD
 
     // Piano Fallboard (Polished Walnut with Gilded Brass Nameplate)
     ctx.save();
+    const vintagePianoImg = getCachedImage('assets/vintage_piano.jpg');
     if (vintagePianoImg && vintagePianoImg.complete && vintagePianoImg.naturalWidth > 0) {
       ctx.drawImage(vintagePianoImg, 0, 0, vintagePianoImg.naturalWidth, vintagePianoImg.naturalHeight * 0.25, x + 5, pianoY, w - 10, fallboardH);
       ctx.fillStyle = 'rgba(20, 10, 5, 0.45)';
@@ -633,6 +611,12 @@ function drawLiquidGoldWaveform(
   analysis: any,
   settings: any
 ) {
+  ctx.save();
+  // STRICT CANVAS CLIPPING (Resolves Issue #6 permanently)
+  ctx.beginPath();
+  roundRect(ctx, x, y, w, h, 8, false, false);
+  ctx.clip();
+
   const centerY = y + h / 2;
 
   // 1. Dark Smoked Walnut Glass with radial ambient glow
@@ -644,7 +628,7 @@ function drawLiquidGoldWaveform(
   ctx.fillRect(x, y, w, h);
 
   // Subtle acoustic string lines behind the waveform
-  ctx.strokeStyle = 'rgba(212, 175, 55, 0.06)';
+  ctx.strokeStyle = 'rgba(212, 175, 55, 0.08)';
   ctx.lineWidth = 1;
   for (let lx = x + 24; lx < x + w - 24; lx += 32) {
     ctx.beginPath();
@@ -653,11 +637,11 @@ function drawLiquidGoldWaveform(
     ctx.stroke();
   }
 
-  // Floating golden embers (VisualizerWave style volumetric particles)
+  // Floating golden embers (strictly clamped inside box)
   for (let i = 0; i < 35; i++) {
     const seed = i * 61.7;
     const progress = (currentTime * 45 + seed + analysis.bass * 60) % (h + 30);
-    const px = x + 30 + (Math.sin(currentTime * 1.5 + i * 2.1) * 45 + (i * 27) % (w - 60));
+    const px = Math.max(x + 12, Math.min(x + w - 12, x + 30 + (Math.sin(currentTime * 1.5 + i * 2.1) * 45 + (i * 27) % (w - 60))));
     const py = (y + h + 15) - progress;
     const alpha = Math.max(0, Math.min(0.85, 1 - progress / (h + 30)));
     ctx.fillStyle = `rgba(254, 240, 138, ${alpha})`;
@@ -680,7 +664,7 @@ function drawLiquidGoldWaveform(
   const waveData = analysis.waveform;
   const waveLen = waveData ? waveData.length : 0;
   const fftData = analysis.fft;
-  const maxAmp = (h / 2) - 18;
+  const maxAmp = (h / 2) - 22; // strict headroom
 
   for (let i = 0; i <= numPoints; i++) {
     const px = startX + i * step;
@@ -697,12 +681,13 @@ function drawLiquidGoldWaveform(
     const fftVal = (fftData && fftData[fftIdx]) ? (fftData[fftIdx] / 255) : 0;
 
     // Organic multi-harmonic synthesis combined with real audio time-domain
-    const harmonic = Math.sin(norm * 22 + currentTime * 5) * 0.12 * analysis.mid
-                   + Math.cos(norm * 45 - currentTime * 3) * 0.08 * analysis.treble;
-    const bassBloom = Math.exp(-Math.pow((norm - 0.42) * 5, 2)) * analysis.bass * 0.45;
+    const harmonic = Math.sin(norm * 22 + currentTime * 5) * 0.10 * analysis.mid
+                   + Math.cos(norm * 45 - currentTime * 3) * 0.06 * analysis.treble;
+    const bassBloom = Math.exp(-Math.pow((norm - 0.42) * 5, 2)) * analysis.bass * 0.40;
 
-    const combinedAmp = Math.max(0.04, rawVal * 0.65 + fftVal * 0.35 + harmonic + bassBloom) * env;
-    const finalH = combinedAmp * maxAmp + 5;
+    const combinedAmp = Math.max(0.04, rawVal * 0.55 + fftVal * 0.30 + harmonic + bassBloom) * env;
+    // CLAMP FINAL HEIGHT STRICTLY TO maxAmp!
+    const finalH = Math.min(maxAmp, Math.max(5, combinedAmp * maxAmp));
 
     topPoints.push({ x: px, y: centerY - finalH });
     botPoints.push({ x: px, y: centerY + finalH });
@@ -725,15 +710,15 @@ function drawLiquidGoldWaveform(
   ctx.closePath();
   ctx.fillStyle = goldFillGrad;
   ctx.shadowColor = '#f59e0b';
-  ctx.shadowBlur = 24 * (settings.glowIntensity || 1.2);
+  ctx.shadowBlur = 18 * (settings.glowIntensity || 1.1);
   ctx.fill();
   ctx.shadowBlur = 0;
 
-  // Draw Sharp Glowing Crest Lines (VisualizerWave hallmark)
+  // Draw Sharp Glowing Crest Lines
   ctx.strokeStyle = '#fffbeb';
-  ctx.lineWidth = 2.4;
+  ctx.lineWidth = 2.0;
   ctx.shadowColor = '#fde047';
-  ctx.shadowBlur = 14;
+  ctx.shadowBlur = 10;
 
   ctx.beginPath();
   ctx.moveTo(topPoints[0].x, topPoints[0].y);
@@ -744,5 +729,8 @@ function drawLiquidGoldWaveform(
   ctx.moveTo(botPoints[0].x, botPoints[0].y);
   for (let i = 1; i < botPoints.length; i++) ctx.lineTo(botPoints[i].x, botPoints[i].y);
   ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  ctx.restore(); // remove clip
   ctx.shadowBlur = 0;
 }

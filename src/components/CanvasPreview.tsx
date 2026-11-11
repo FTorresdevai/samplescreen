@@ -61,11 +61,15 @@ export const CanvasPreview: React.FC<CanvasPreviewProps> = ({
 
     const loop = () => {
       if (!isExporting && rendererRef.current) {
-        const currentTime = audioManager.getCurrentTime();
-        const analysis = audioManager.getRealtimeAnalysis();
+        try {
+          const currentTime = audioManager.getCurrentTime();
+          const analysis = audioManager.getRealtimeAnalysis();
 
-        const { timingInfo } = calculateFrameProgress(currentTime, timing, settings, unifiedMidi);
-        rendererRef.current.render(currentTime, unifiedMidi, analysis, settings, timingInfo);
+          const { timingInfo } = calculateFrameProgress(currentTime, timing, settings, unifiedMidi);
+          rendererRef.current.render(currentTime, unifiedMidi, analysis, settings, timingInfo);
+        } catch (err) {
+          console.error('[SampleScreen] Canvas render loop error:', err);
+        }
       }
       animId = requestAnimationFrame(loop);
     };

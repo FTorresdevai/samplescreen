@@ -1,23 +1,8 @@
 import { ModelDrawContext } from '../../types';
 import { formatNoteName, detectChord } from '../../engine/chords';
 import { hexToRgbaStr } from '../../engine/palettes';
-import { roundRect } from '../../hardware/st909-synth';
-
-let tzLadoMauImg: HTMLImageElement | null = null;
-let isLoaded = false;
-
-function loadAssets() {
-  if (isLoaded || typeof window === 'undefined') return;
-  isLoaded = true;
-
-  const tz = new Image();
-  tz.src = '/assets/tz_lado_mau_album.jpg';
-  tz.onload = () => { tzLadoMauImg = tz; };
-}
-
-if (typeof window !== 'undefined') {
-  loadAssets();
-}
+import { roundRect } from '../../shared/canvas-utils';
+import { getCachedImage } from '../../shared/assets';
 
 /**
  * Mode: Tz da Coronel "Lado Mau" • Inferno Trap Piano Suite
@@ -28,8 +13,6 @@ if (typeof window !== 'undefined') {
  * - Ebony & Charcoal pianoforte with glowing flame keys
  */
 export function drawTzLadoMauModel(ctx: CanvasRenderingContext2D, context: ModelDrawContext) {
-  loadAssets();
-
   const { region, currentTime, loopTime, duration, midi, activeNotes, analysis, settings, introInfo } = context;
   const { x, y, width: w, height: h } = region;
 
@@ -89,7 +72,7 @@ export function drawTzLadoMauModel(ctx: CanvasRenderingContext2D, context: Model
   const roomImgX = x + 8;
   const roomImgY = y + 8;
 
-  const imgToDraw = tzLadoMauImg;
+  const imgToDraw = getCachedImage('assets/tz_lado_mau_album.jpg');
   if (imgToDraw && imgToDraw.complete && imgToDraw.naturalWidth > 0) {
     ctx.save();
     roundRect(ctx, roomImgX, roomImgY, roomImgW, roomImgH, 8, true, false);
@@ -562,6 +545,12 @@ function drawSeismicMagmaWaveform(
   analysis: any,
   settings: any
 ) {
+  ctx.save();
+  // STRICT CANVAS CLIPPING (Resolves Issue #6 permanently for TZ Lado Mau)
+  ctx.beginPath();
+  roundRect(ctx, x, y, w, h, 8, false, false);
+  ctx.clip();
+
   const centerY = y + h / 2;
 
   // Volcanic crevasse backdrop
@@ -572,11 +561,11 @@ function drawSeismicMagmaWaveform(
   ctx.fillStyle = bgGrad;
   ctx.fillRect(x, y, w, h);
 
-  // Volcanic ember sparks bursting
+  // Volcanic ember sparks bursting (clamped strictly inside box)
   for (let i = 0; i < 40; i++) {
     const seed = i * 53.3;
     const progress = (currentTime * 55 + seed + analysis.bass * 80) % (h + 30);
-    const px = x + 30 + (Math.sin(currentTime * 2 + i * 2.7) * 55 + (i * 31) % (w - 60));
+    const px = Math.max(x + 12, Math.min(x + w - 12, x + 30 + (Math.sin(currentTime * 2 + i * 2.7) * 55 + (i * 31) % (w - 60))));
     const py = (y + h + 15) - progress;
     const alpha = Math.max(0, Math.min(0.9, 1 - progress / (h + 30)));
     ctx.fillStyle = i % 2 === 0 ? `rgba(255, 69, 0, ${alpha})` : `rgba(255, 170, 0, ${alpha})`;
@@ -599,7 +588,7 @@ function drawSeismicMagmaWaveform(
   const waveData = analysis.waveform;
   const waveLen = waveData ? waveData.length : 0;
   const fftData = analysis.fft;
-  const maxAmp = (h / 2) - 18;
+  const maxAmp = (h / 2) - 22; // strict headroom
 
   for (let i = 0; i <= numPoints; i++) {
     const px = startX + i * step;
@@ -615,11 +604,12 @@ function drawSeismicMagmaWaveform(
     const fftVal = (fftData && fftData[fftIdx]) ? (fftData[fftIdx] / 255) : 0;
 
     // High-frequency seismic jitter for trap 808 distortion
-    const jitter = (Math.sin(norm * 65 + currentTime * 12) * Math.cos(norm * 120)) * 0.15 * analysis.treble;
-    const kickDisplacement = Math.exp(-Math.pow((norm - 0.45) * 6, 2)) * analysis.bass * 0.55;
+    const jitter = (Math.sin(norm * 65 + currentTime * 12) * Math.cos(norm * 120)) * 0.12 * analysis.treble;
+    const kickDisplacement = Math.exp(-Math.pow((norm - 0.45) * 6, 2)) * analysis.bass * 0.45;
 
-    const combined = Math.max(0.05, rawVal * 0.6 + fftVal * 0.4 + jitter + kickDisplacement) * env;
-    const finalH = combined * maxAmp + 6;
+    const combined = Math.max(0.05, rawVal * 0.55 + fftVal * 0.35 + jitter + kickDisplacement) * env;
+    // CLAMP FINAL HEIGHT STRICTLY TO maxAmp!
+    const finalH = Math.min(maxAmp, Math.max(5, combined * maxAmp));
 
     topPoints.push({ x: px, y: centerY - finalH });
     botPoints.push({ x: px, y: centerY + finalH });
@@ -642,15 +632,15 @@ function drawSeismicMagmaWaveform(
   ctx.closePath();
   ctx.fillStyle = magmaFillGrad;
   ctx.shadowColor = '#ff2200';
-  ctx.shadowBlur = 28 * (settings.glowIntensity || 1.2);
+  ctx.shadowBlur = 20 * (settings.glowIntensity || 1.1);
   ctx.fill();
   ctx.shadowBlur = 0;
 
   // White-hot Lightning Core line
   ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 2.6;
+  ctx.lineWidth = 2.2;
   ctx.shadowColor = '#ffedd5';
-  ctx.shadowBlur = 12;
+  ctx.shadowBlur = 10;
 
   ctx.beginPath();
   ctx.moveTo(topPoints[0].x, topPoints[0].y);
@@ -661,5 +651,8 @@ function drawSeismicMagmaWaveform(
   ctx.moveTo(botPoints[0].x, botPoints[0].y);
   for (let i = 1; i < botPoints.length; i++) ctx.lineTo(botPoints[i].x, botPoints[i].y);
   ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  ctx.restore(); // remove clip
   ctx.shadowBlur = 0;
 }

@@ -21,6 +21,11 @@ export function drawLinearModel(ctx: CanvasRenderingContext2D, context: ModelDra
     // ==========================================
     // WAVEFORM MODE (PURE AUDIO STREAM)
     // ==========================================
+    ctx.save();
+    ctx.beginPath();
+    roundRect(ctx, x, y, w, h, 8);
+    ctx.clip();
+
     const centerY = y + h / 2;
 
     // Spectrum Equalizer Bars
@@ -54,6 +59,7 @@ export function drawLinearModel(ctx: CanvasRenderingContext2D, context: ModelDra
     ctx.fillStyle = settings.accentColor || '#fde047';
     ctx.textAlign = 'left';
     ctx.fillText('AUDIO STREAM • MASTER STEREO WAVEFORM (60 FPS)', x + 24, y + 28);
+    ctx.restore();
 
   } else {
     // ==========================================

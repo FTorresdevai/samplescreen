@@ -1,20 +1,8 @@
 import { AudioAnalysis, MidiNote, ParsedMidi, VisualizerSettings } from '../types';
 import { drawPianoKeyboard, getKeyPosition } from './keyboard-engine';
 import { drawMirroredSpectrumBars, drawOscilloscopeBeam, drawVintageVuMeter } from '../shared/waveform-engine';
-import { roundRect } from './analog-synth';
-
-// Lazy loaded assets for Drake Take Care
-let takeCareImg: HTMLImageElement | null = null;
-let isAssetsLoaded = false;
-
-function loadAssets() {
-  if (isAssetsLoaded || typeof window === 'undefined') return;
-  isAssetsLoaded = true;
-
-  const tc = new Image();
-  tc.src = '/assets/take_care_album.jpg';
-  tc.onload = () => { takeCareImg = tc; };
-}
+import { roundRect } from '../shared/canvas-utils';
+import { getCachedImage } from '../shared/assets';
 
 /**
  * Vintage Wing Upright Piano (Pianoforte Vertical de Concerto dos Anos 40)
@@ -37,7 +25,7 @@ export function drawVintageWingUprightPiano(
   settings: VisualizerSettings,
   isWaveformMode: boolean
 ) {
-  loadAssets();
+  const takeCareImg = getCachedImage('assets/take_care_album.jpg');
   ctx.save();
 
   // 1. ZONAL ARCHITECTURAL LAYOUT

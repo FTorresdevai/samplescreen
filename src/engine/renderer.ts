@@ -3,6 +3,7 @@ import { hexToRgb, hexToRgbaStr } from './palettes';
 import { formatNoteName, detectChord } from './chords';
 import { getModelRenderer } from '../models/registry';
 import { getSynthRenderer } from '../hardware/registry';
+import { drawStudioTapeMachine } from '../hardware/tape-machine';
 import { roundRect } from '../shared/canvas-utils';
 
 export class CanvasRenderer {
@@ -95,6 +96,7 @@ export class CanvasRenderer {
     const synthH = 570;
     const currentMode = settings.centerVisualizerMode || 'take-care';
     const isGoldSynth = currentMode === 'take-care';
+    const isWaveform = settings.waveformMode ?? (!midi || midi.notes.length === 0);
 
     const synthRegion: SynthRegion = {
       x: contentStartX,
@@ -103,16 +105,28 @@ export class CanvasRenderer {
       height: synthH,
     };
 
-    const renderSynth = getSynthRenderer(settings.synthModel);
-    renderSynth(ctx, {
-      region: synthRegion,
-      currentTime,
-      midi,
-      activeNotes,
-      analysis,
-      settings,
-      colorTheme: isGoldSynth ? 'gold' : 'crimson',
-    });
+    if (isWaveform) {
+      // In Waveform Mode: Globally dispatch the Master Tape Machine Mark II (Zero piano keys!)
+      drawStudioTapeMachine(
+        ctx,
+        synthRegion.x,
+        synthRegion.y,
+        synthRegion.width,
+        synthRegion.height,
+        isGoldSynth ? 'gold' : 'crimson'
+      );
+    } else {
+      const renderSynth = getSynthRenderer(settings.synthModel);
+      renderSynth(ctx, {
+        region: synthRegion,
+        currentTime,
+        midi,
+        activeNotes,
+        analysis,
+        settings,
+        colorTheme: isGoldSynth ? 'gold' : 'crimson',
+      });
+    }
 
     // 5. Active Visual Model Card (Bottom Half: y = 795 to 1465, h = 670px)
     const modelY = 795;

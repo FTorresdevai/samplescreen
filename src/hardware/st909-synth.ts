@@ -1,31 +1,9 @@
 import { AudioAnalysis, MidiNote, ParsedMidi, VisualizerSettings } from '../types';
 import { formatNoteName } from '../engine/chords';
 import { hexToRgbaStr } from '../engine/palettes';
+import { roundRect } from '../shared/canvas-utils';
 
-export function roundRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number,
-  fill = true,
-  stroke = false
-) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
-  if (fill) ctx.fill();
-  if (stroke) ctx.stroke();
-}
+export { roundRect };
 
 /**
  * Draws a precision 3D vector rotary synthesizer knob with calibrated scale ticks
@@ -327,7 +305,12 @@ function drawDivaScope(
     ctx.stroke();
   }
 
-  // Draw intense amber phosphor audio waveform
+  // Draw intense amber phosphor audio waveform (strictly clipped to CRT screen)
+  ctx.save();
+  ctx.beginPath();
+  roundRect(ctx, x + 2, y + 2, w - 4, h - 4, 3, false, false);
+  ctx.clip();
+
   const traceW = w - 16;
   const traceX = x + 8;
   const midY = y + h / 2;
@@ -339,7 +322,7 @@ function drawDivaScope(
     const px = traceX + (i / (points - 1)) * traceW;
     const waveIdx = Math.floor((i / points) * waveform.length);
     const sample = ((waveform[waveIdx] || 128) - 128) / 128;
-    const py = midY + sample * maxAmplitude * sensitivity;
+    const py = midY + Math.max(-maxAmplitude, Math.min(maxAmplitude, sample * maxAmplitude * sensitivity));
 
     if (i === 0) ctx.moveTo(px, py);
     else ctx.lineTo(px, py);
@@ -360,6 +343,7 @@ function drawDivaScope(
   ctx.lineWidth = 1.2;
   ctx.stroke();
   ctx.restore();
+  ctx.restore(); // remove screen clip
 
   // CRT glass sheen highlight across top
   const glassGrad = ctx.createLinearGradient(x, y, x + w, y + h * 0.4);

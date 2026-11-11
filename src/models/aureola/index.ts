@@ -97,7 +97,7 @@ export function drawAureolaModel(ctx: CanvasRenderingContext2D, context: ModelDr
       const wAngle = (k / wSteps) * Math.PI * 2;
       const dIdx = Math.floor((k / wSteps) * waveData.length);
       const amp = ((waveData[dIdx] - 128) / 128) * (coreR * 0.4) * (settings.audioSensitivity || 1.2);
-      const curWr = coreR * 0.65 + amp;
+      const curWr = coreR * 0.65 + Math.max(-coreR * 0.35, Math.min(coreR * 0.45, amp));
       const wx = cx + Math.cos(wAngle) * curWr;
       const wy = cy + Math.sin(wAngle) * curWr;
       if (k === 0) ctx.moveTo(wx, wy);

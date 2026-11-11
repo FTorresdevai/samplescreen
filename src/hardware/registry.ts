@@ -3,6 +3,7 @@ import { drawST909Synthesizer } from './st909-synth';
 import { drawWingUprightSynth } from './wing-upright-synth';
 import { drawAnalogHardwareSynthesizer } from './analog-synth';
 import { drawUheDivaSynthesizer } from './diva-synth';
+import { drawStudioTapeMachine } from './tape-machine';
 
 export type SynthDrawFn = (ctx: CanvasRenderingContext2D, context: SynthDrawContext) => void;
 
@@ -75,14 +76,33 @@ export const drawDivaSynthAdapter: SynthDrawFn = (ctx, context) => {
   );
 };
 
+export const drawTapeMachineAdapter: SynthDrawFn = (ctx, context) => {
+  const { region, settings, colorTheme } = context;
+  drawStudioTapeMachine(
+    ctx,
+    region.x,
+    region.y,
+    region.width,
+    region.height,
+    colorTheme ?? (settings.centerVisualizerMode === 'take-care' ? 'gold' : 'crimson')
+  );
+};
+
 export const SYNTH_REGISTRY: Record<string, SynthDrawFn> = {
   'st909': drawST909Adapter,
+  'tape-machine': drawTapeMachineAdapter,
   'wing-upright': drawWingUprightAdapter,
   'analog-synth': drawAnalogSynthAdapter,
   'diva-synth': drawDivaSynthAdapter,
 };
 
 export const SYNTHS_MANIFEST: SynthManifest[] = [
+  {
+    id: 'tape-machine',
+    name: 'Tape Mark II Master Studio Deck',
+    tag: 'ANALOG MASTER',
+    description: 'Swedish 1/2" dual-reel master tape machine with incandescent backlit VU meters and servo motor control.',
+  },
   {
     id: 'st909',
     name: 'ST 909 Analogue Synthesizer',
