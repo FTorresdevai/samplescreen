@@ -34,6 +34,8 @@ export type BuiltinVisualModel =
 
 export type ActiveVisualModel = BuiltinVisualModel | (string & {});
 
+export type ChordDisplay = 'bottom' | 'piano' | 'off'; // 'piano' = under album keyboard
+
 export interface VisualizerSettings {
   // Direct Text Editing
   title: string;
@@ -55,9 +57,7 @@ export interface VisualizerSettings {
 
   // Layout & Style Features
   synthModel?: string;       // Active synthesizer hardware model ('st909', etc.)
-  showChord: boolean;            // Show active note names & chord at the bottom of the screen (below visualizer)
-  showChordBelowPiano: boolean;  // Show chord information directly below the piano keyboard
-  chordDisplayLocation?: 'bottom' | 'top' | 'both' | 'hidden'; // Unified chord location selector
+  chordDisplay: ChordDisplay;    // Where active notes/chord are shown
   showChordSymbol: boolean;      // Show detected chord symbol (e.g. Cm7)
   showSafeZoneGuides: boolean; // Instagram Reels / TikTok overlay
   showPreviewHud?: boolean;    // Show/hide on-screen HUD buttons over preview (clean view)

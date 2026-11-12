@@ -325,7 +325,7 @@ export class CanvasRenderer {
     ctx.save();
 
     const isWaveform = !!settings.waveformMode;
-    const showNotesRow = settings.showChord !== false;
+    const showNotesRow = settings.chordDisplay === 'bottom';
 
     if (showNotesRow) {
       if (isWaveform) {
@@ -364,12 +364,6 @@ export class CanvasRenderer {
           ctx.shadowBlur = 14;
           ctx.fillText(fullText, centerX, notesY);
           ctx.shadowBlur = 0;
-        } else {
-          ctx.font = '800 24px "JetBrains Mono", monospace';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillStyle = '#64748b';
-          ctx.fillText('—', centerX, notesY);
         }
       }
     }

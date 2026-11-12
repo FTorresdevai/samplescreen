@@ -466,9 +466,7 @@ export function drawTakeCareModel(ctx: CanvasRenderingContext2D, context: ModelD
     ctx.letterSpacing = '0px';
 
     // Active Chord Voicing Readout in Royal Gold Typography
-    const showTopChord = settings.chordDisplayLocation
-      ? (settings.chordDisplayLocation === 'top' || settings.chordDisplayLocation === 'both')
-      : (settings.showChordBelowPiano === true);
+    const showTopChord = settings.chordDisplay === 'piano';
 
     if (showTopChord) {
       const activeChord = detectChord(activeNotes, settings.accidental, settings.middleC);

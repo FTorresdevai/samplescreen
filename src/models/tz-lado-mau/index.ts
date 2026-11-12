@@ -408,9 +408,7 @@ export function drawTzLadoMauModel(ctx: CanvasRenderingContext2D, context: Model
   ctx.letterSpacing = '0px';
 
   // Active Chord Voicing
-  const showTopChord = settings.chordDisplayLocation
-    ? (settings.chordDisplayLocation === 'top' || settings.chordDisplayLocation === 'both')
-    : (settings.showChordBelowPiano === true);
+  const showTopChord = settings.chordDisplay === 'piano';
 
   if (showTopChord) {
     const activeChord = detectChord(activeNotes, settings.accidental, settings.middleC);

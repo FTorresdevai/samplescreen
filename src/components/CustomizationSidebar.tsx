@@ -21,7 +21,7 @@ import {
   RotateCcw,
   Check
 } from 'lucide-react';
-import { VisualizerSettings, ParsedMidi } from '../types';
+import { VisualizerSettings, ParsedMidi, ChordDisplay } from '../types';
 import { PALETTES } from '../engine/palettes';
 import { VISUAL_MODELS_MANIFEST } from '../models/registry';
 
@@ -426,8 +426,11 @@ export const CustomizationSidebar: React.FC<CustomizationSidebarProps> = ({
                 <button
                   key={model.id}
                   onClick={() => {
+                    // 'Under keys' only exists in albums; fall back to the bottom bar elsewhere
+                    const chordFix = model.category !== 'album' && settings.chordDisplay === 'piano' ? { chordDisplay: 'bottom' as const } : {};
                     if (model.id === 'take-care') {
                       onUpdate({
+                        ...chordFix,
                         centerVisualizerMode: 'take-care',
                         notesColor: '#eab308',
                         circleColor: '#382014',
@@ -437,6 +440,7 @@ export const CustomizationSidebar: React.FC<CustomizationSidebarProps> = ({
                       });
                     } else if (model.id === 'tz-lado-mau') {
                       onUpdate({
+                        ...chordFix,
                         centerVisualizerMode: 'tz-lado-mau',
                         notesColor: '#ff5500',
                         circleColor: '#2b1206',
@@ -446,6 +450,7 @@ export const CustomizationSidebar: React.FC<CustomizationSidebarProps> = ({
                       });
                     } else if (model.id === 'aureola') {
                       onUpdate({
+                        ...chordFix,
                         centerVisualizerMode: 'aureola',
                         notesColor: '#f43f5e',
                         circleColor: '#3b1c4e',
@@ -455,6 +460,7 @@ export const CustomizationSidebar: React.FC<CustomizationSidebarProps> = ({
                       });
                     } else if (model.id === 'orbital-moon') {
                       onUpdate({
+                        ...chordFix,
                         centerVisualizerMode: 'orbital-moon',
                         notesColor: '#e0e7ff',
                         circleColor: '#25254a',
@@ -463,7 +469,7 @@ export const CustomizationSidebar: React.FC<CustomizationSidebarProps> = ({
                         glowColor: '#6366f1',
                       });
                     } else {
-                      onUpdate({ centerVisualizerMode: model.id });
+                      onUpdate({ ...chordFix, centerVisualizerMode: model.id });
                     }
                   }}
                   className={`p-2 rounded-lg text-left transition flex flex-col justify-between ${
@@ -541,66 +547,37 @@ export const CustomizationSidebar: React.FC<CustomizationSidebarProps> = ({
             </div>
           </div>
 
-          {/* Chord Display Location: Bottom, Top, Both, Hidden */}
-          <div className="space-y-1.5 pt-1">
-            <span className="text-xs text-zinc-400 block font-mono">Chord Information Position:</span>
-            <div className="grid grid-cols-4 gap-1 p-1 bg-zinc-900/90 rounded-lg border border-white/[0.08]">
-              <button
-                type="button"
-                onClick={() => onUpdate({ chordDisplayLocation: 'bottom', showChord: true, showChordBelowPiano: false })}
-                className={`py-1.5 px-1 rounded text-[11px] font-mono font-bold transition text-center ${
-                  (settings.chordDisplayLocation === 'bottom' || (!settings.chordDisplayLocation && settings.showChord !== false && !settings.showChordBelowPiano))
-                    ? 'bg-amber-500 text-black shadow-sm font-black'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
-                }`}
-                title="Show only at bottom of screen (Below visualizer)"
-              >
-                Bottom
-              </button>
-              <button
-                type="button"
-                onClick={() => onUpdate({ chordDisplayLocation: 'top', showChord: false, showChordBelowPiano: true })}
-                className={`py-1.5 px-1 rounded text-[11px] font-mono font-bold transition text-center ${
-                  settings.chordDisplayLocation === 'top'
-                    ? 'bg-amber-500 text-black shadow-sm font-black'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
-                }`}
-                title="Show only at top (Directly below piano)"
-              >
-                Top
-              </button>
-              <button
-                type="button"
-                onClick={() => onUpdate({ chordDisplayLocation: 'both', showChord: true, showChordBelowPiano: true })}
-                className={`py-1.5 px-1 rounded text-[11px] font-mono font-bold transition text-center ${
-                  settings.chordDisplayLocation === 'both'
-                    ? 'bg-amber-500 text-black shadow-sm font-black'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
-                }`}
-                title="Show at both top and bottom"
-              >
-                Both
-              </button>
-              <button
-                type="button"
-                onClick={() => onUpdate({ chordDisplayLocation: 'hidden', showChord: false, showChordBelowPiano: false })}
-                className={`py-1.5 px-1 rounded text-[11px] font-mono font-bold transition text-center ${
-                  settings.chordDisplayLocation === 'hidden'
-                    ? 'bg-amber-500 text-black shadow-sm font-black'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
-                }`}
-                title="Hide chord info on both"
-              >
-                Hidden
-              </button>
-            </div>
-            <p className="text-[10px] text-zinc-500 font-mono">
-              {settings.chordDisplayLocation === 'bottom' && '✓ Displaying notes only on the bottom bar (no duplication).'}
-              {settings.chordDisplayLocation === 'top' && '✓ Displaying notes only at the top (below synthesizer).'}
-              {settings.chordDisplayLocation === 'both' && '✓ Displaying notes at top and bottom simultaneously.'}
-              {settings.chordDisplayLocation === 'hidden' && '✓ Chord and notes info hidden.'}
-            </p>
-          </div>
+          {/* Chord display: bottom bar, under album keyboard, or off */}
+          {(() => {
+            const isAlbum = VISUAL_MODELS_MANIFEST.find(m => m.id === settings.centerVisualizerMode)?.category === 'album';
+            const options: { value: ChordDisplay; label: string; title: string }[] = [
+              { value: 'bottom', label: 'Bottom', title: 'Show notes in the bottom bar' },
+              ...(isAlbum ? [{ value: 'piano' as const, label: 'Under keys', title: 'Show notes under the album keyboard' }] : []),
+              { value: 'off', label: 'Off', title: 'Hide notes and chord' },
+            ];
+            return (
+              <div className="space-y-1.5 pt-1">
+                <span className="text-xs text-zinc-400 block font-mono">Chord display</span>
+                <div className={`grid ${isAlbum ? 'grid-cols-3' : 'grid-cols-2'} gap-1 p-1 bg-zinc-900/90 rounded-lg border border-white/[0.08]`}>
+                  {options.map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => onUpdate({ chordDisplay: opt.value })}
+                      className={`py-1.5 px-1 rounded text-[11px] font-mono font-bold transition text-center ${
+                        settings.chordDisplay === opt.value
+                          ? 'bg-amber-500 text-black shadow-sm font-black'
+                          : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
+                      }`}
+                      title={opt.title}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Checkboxes matching reference */}
           <div className="space-y-2 pt-1">

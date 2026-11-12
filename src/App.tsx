@@ -43,9 +43,7 @@ export const App: React.FC = () => {
     backgroundGlow: true,
     waveformMode: initialWaveform,
 
-    showChord: true,
-    showChordBelowPiano: false,
-    chordDisplayLocation: 'bottom',
+    chordDisplay: 'bottom',
     showChordSymbol: false,
     showSafeZoneGuides: false,
     showPreviewHud: false,
