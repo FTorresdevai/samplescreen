@@ -70,7 +70,7 @@ export const CanvasPreview: React.FC<CanvasPreviewProps> = ({
   const hasMidi = unifiedMidi.notes.length > 0;
   useEffect(() => {
     loadRenderModules(settings, hasMidi).catch(err => console.error('[SampleScreen] Module load failed:', err));
-  }, [settings.modeId, settings.synthModel, settings.waveformMode, hasMidi]);
+  }, [settings.modeId, settings.synthModel, settings.albumView, hasMidi]);
 
   // Main 60 FPS Animation loop for real-time preview with seamless unified timeline and intro awareness.
   // Pauses rendering while an export is actively generating frames to free GPU/CPU bandwidth.

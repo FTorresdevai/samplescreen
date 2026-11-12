@@ -26,7 +26,7 @@ export const App: React.FC = () => {
   const rawModel = urlParams?.get('model');
   const initialManifest = findManifest(rawModel) ?? findManifest(DEFAULT_MODE_ID)!;
   const initialDefaults = initialManifest.defaults ?? {};
-  const initialWaveform = urlParams?.get('waveform') === 'true';
+  const initialView = urlParams?.get('view') === 'waveform' ? 'waveform' : 'midi';
 
   // Settings State with complete feature set matching reference video
   const [settings, setSettings] = useState<VisualizerSettings>({
@@ -42,7 +42,7 @@ export const App: React.FC = () => {
     accentColor: '#fde047',
     glowColor: '#f59e0b',
     backgroundGlow: true,
-    waveformMode: initialWaveform,
+    albumView: initialView,
 
     chordDisplay: 'bottom',
     showChordSymbol: false,
@@ -257,7 +257,7 @@ export const App: React.FC = () => {
         audioTrimBars: defaultBars,
         loopBars: defaultBars,
         isAudioTrimmed: false,
-        waveformMode: !isCustomMidi ? true : prev.waveformMode,
+        albumView: !isCustomMidi ? 'waveform' : prev.albumView, // new audio without a MIDI file → waveform view
       }));
 
       const timing = getTimelineTiming(activeMidi, activeIntro, {
@@ -341,7 +341,7 @@ export const App: React.FC = () => {
         key: parsed.key || prev.key,
         loopBars: parsed.totalBars,
         isAudioTrimmed: false,
-        waveformMode: false, // Activating MIDI file defaults to piano / sequencer mode
+        albumView: 'midi', // loading a MIDI file switches albums to the MIDI view
       }));
       if (audioSource === 'demo') {
         audioManager.generateCombinedAudioBuffer(

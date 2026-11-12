@@ -19,7 +19,7 @@ export function drawTzLadoMauModel(ctx: CanvasRenderingContext2D, context: Model
   ctx.save();
 
   // 1. ZONAL ARCHITECTURE
-  const isWaveform = !!context.isWaveformMode;
+  const isWaveform = context.albumView === 'waveform';
   const roomH = Math.round(h * 0.42);
   const rollAreaH = h - roomH;
   // In Waveform Mode, the piano keyboard is removed so the seismic waveform gets the full stage!
@@ -200,7 +200,7 @@ export function drawTzLadoMauModel(ctx: CanvasRenderingContext2D, context: Model
   };
 
   // 5. CENTRAL STAGE: VISUALIZERWAVE SEISMIC MAGMA PLASMA vs INFERNO WATERFALL
-  if (context.isWaveformMode) {
+  if (isWaveform) {
     drawSeismicMagmaWaveform(ctx, x + 5, waterfallY, w - 10, waterfallH, currentTime, analysis, settings);
   } else {
     ctx.save();

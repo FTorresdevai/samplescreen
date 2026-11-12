@@ -22,7 +22,7 @@ export function drawTakeCareModel(ctx: CanvasRenderingContext2D, context: ModelD
   ctx.save();
 
   // 1. ZONAL ARCHITECTURE
-  const isWaveform = !!context.isWaveformMode;
+  const isWaveform = context.albumView === 'waveform';
   const roomH = Math.round(h * 0.42);                  // Upper Baroque Chamber & Table (~280px)
   const rollAreaH = h - roomH;                         // Lower Suite (~390px)
   // In Waveform Mode, the piano keyboard is removed so the waveform gets the full stage!
@@ -226,7 +226,7 @@ export function drawTakeCareModel(ctx: CanvasRenderingContext2D, context: ModelD
   };
 
   // 5. CENTRAL STAGE: VISUALIZERWAVE LIQUID GOLD WAVEFORM vs PIANO WATERFALL
-  if (context.isWaveformMode) {
+  if (isWaveform) {
     // ==============================================================
     // WAVEFORM MODE: VisualizerWave-Inspired Liquid Gold Ribbon
     // ==============================================================

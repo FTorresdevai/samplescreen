@@ -40,7 +40,7 @@ test('Timeline: calculateFrameProgress with and without intro', () => {
     accentColor: '#aaa',
     glowColor: '#bbb',
     backgroundGlow: true,
-    waveformMode: false,
+    albumView: 'midi',
     chordDisplay: 'bottom',
     showChordSymbol: false,
     showSafeZoneGuides: false,

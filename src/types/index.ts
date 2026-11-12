@@ -25,6 +25,7 @@ export interface ColorPalette {
 }
 
 export type SynthTheme = 'crimson' | 'gold';
+export type AlbumView = 'midi' | 'waveform';
 
 export type ChordDisplay = 'bottom' | 'piano' | 'off'; // 'piano' = under album keyboard
 
@@ -45,7 +46,7 @@ export interface VisualizerSettings {
   backgroundGlow: boolean;  // Toggle audio-reactive ambient glow
 
   // Universal Mode Switch: Piano Roll (with MIDI) vs Waveform View (Pure Audio)
-  waveformMode: boolean;    // true = Soundwave / Oscilloscope / Spectrum (no piano); false = Piano Roll / Waterfall (with MIDI)
+  albumView: AlbumView;     // album modes only: MIDI waterfall + keys, or full-stage audio waveform
 
   // Layout & Style Features
   synthModel?: string;       // Active synthesizer hardware model ('st909', etc.)
@@ -124,7 +125,7 @@ export interface ModelDrawContext {
   analysis: AudioAnalysis;
   settings: VisualizerSettings;
   introInfo?: TimingInfo;
-  isWaveformMode: boolean;
+  albumView: AlbumView;     // resolved view (no MIDI → 'waveform'); read only by album modes
 }
 
 /** Default export of src/modes/<kind>/<id>/manifest.ts (loaded eagerly). */
@@ -135,6 +136,7 @@ export interface ModeManifest {
   input: 'midi' | 'audio';
   description: string;
   hardware?: string;           // forces this hardware id (ignores settings.synthModel)
+  waveformHardware?: string;   // albums: hardware in 'waveform' view (default 'tape-machine')
   palette?: Pick<VisualizerSettings, 'notesColor' | 'circleColor' | 'bgColor' | 'accentColor' | 'glowColor'>;
   synthTheme?: SynthTheme;     // default 'crimson'
   defaults?: Partial<Pick<VisualizerSettings, 'title' | 'bpm' | 'key' | 'synthModel'>>; // applied on first load only

@@ -2,7 +2,7 @@ import { AudioAnalysis, MidiNote, ParsedMidi, VisualizerSettings, TimingInfo, Mo
 import { hexToRgbaStr } from './palettes';
 import { formatNoteName, detectChord } from './chords';
 import { RenderModules } from './modules';
-import { isWaveformView } from '../core/mode-resolution';
+import { resolveAlbumView, showsMidi } from '../core/mode-resolution';
 import { roundRect } from '../shared/canvas-utils';
 import { getActiveNotes } from './midi';
 
@@ -68,6 +68,7 @@ export class CanvasRenderer {
 
     // High-performance active MIDI notes lookup at current playback second
     const activeNotes = getActiveNotes(midi.notes || [], loopTime);
+    const hasMidi = !!midi && (midi.notes?.length ?? 0) > 0;
 
     // Instagram Reels / TikTok Safe-Zone Scaling
     let xOffset = 0;
@@ -143,13 +144,15 @@ export class CanvasRenderer {
       analysis,
       settings,
       introInfo: (introInfo && 'hasIntro' in introInfo) ? (introInfo as TimingInfo) : undefined,
-      isWaveformMode: isWaveformView(settings, !!midi && midi.notes.length > 0),
+      albumView: resolveAlbumView(settings, hasMidi),
     };
 
     modules?.mode.draw(ctx, modelDrawContext);
 
     // 7. Bottom Section: Large Glowing Active Notes, Bar Dashes, and Watermark
-    this.drawBottomSection(centerX, 1680, currentTime, loopTime, duration, midi, activeNotes, settings);
+    // Notes row only when the frame shows MIDI (not in album waveform view or audio-only modes)
+    const notesVisible = !!modules && showsMidi(modules.manifest, settings, hasMidi);
+    this.drawBottomSection(centerX, 1680, currentTime, loopTime, duration, midi, activeNotes, settings, notesVisible);
 
     ctx.restore();
 
@@ -333,52 +336,38 @@ export class CanvasRenderer {
     duration: number,
     midi: ParsedMidi,
     activeNotes: MidiNote[],
-    settings: VisualizerSettings
+    settings: VisualizerSettings,
+    notesVisible: boolean
   ) {
     const { ctx } = this;
     ctx.save();
 
-    const isWaveform = !!settings.waveformMode;
-    const showNotesRow = settings.chordDisplay === 'bottom';
+    const showNotesRow = notesVisible && settings.chordDisplay === 'bottom';
 
     if (showNotesRow) {
-      if (isWaveform) {
-        // In Waveform Mode: Audio spectrum readout instead of piano MIDI notes
-        ctx.font = '800 22px "JetBrains Mono", monospace';
-        ctx.letterSpacing = '2.5px';
+      // In Piano / MIDI Mode: Prominent Row of Active Piano Notes and optional Chord Symbol
+      const noteNames = activeNotes.map(n => formatNoteName(n.midi, settings.accidental, settings.middleC));
+
+      if (noteNames.length > 0) {
+        ctx.font = '900 34px "Inter", sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#ffffff';
-        ctx.shadowColor = settings.glowColor || '#f59e0b';
-        ctx.shadowBlur = 10;
-        ctx.fillText('AUDIO WAVEFORM  •  MASTER STEREO', centerX, notesY);
-        ctx.shadowBlur = 0;
-        ctx.letterSpacing = '0px';
-      } else {
-        // In Piano / MIDI Mode: Prominent Row of Active Piano Notes and optional Chord Symbol
-        const noteNames = activeNotes.map(n => formatNoteName(n.midi, settings.accidental, settings.middleC));
 
-        if (noteNames.length > 0) {
-          ctx.font = '900 34px "Inter", sans-serif';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-
-          // Detect chord symbol if enabled (e.g. Cm7)
-          let chordPrefix = '';
-          if (settings.showChordSymbol) {
-            const detected = detectChord(activeNotes, settings.accidental, settings.middleC);
-            if (detected?.symbol) {
-              chordPrefix = `${detected.symbol}  •  `;
-            }
+        // Detect chord symbol if enabled (e.g. Cm7)
+        let chordPrefix = '';
+        if (settings.showChordSymbol) {
+          const detected = detectChord(activeNotes, settings.accidental, settings.middleC);
+          if (detected?.symbol) {
+            chordPrefix = `${detected.symbol}  •  `;
           }
-
-          const fullText = chordPrefix + noteNames.join('  •  ');
-          ctx.fillStyle = '#ffffff';
-          ctx.shadowColor = '#fde047';
-          ctx.shadowBlur = 14;
-          ctx.fillText(fullText, centerX, notesY);
-          ctx.shadowBlur = 0;
         }
+
+        const fullText = chordPrefix + noteNames.join('  •  ');
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowColor = '#fde047';
+        ctx.shadowBlur = 14;
+        ctx.fillText(fullText, centerX, notesY);
+        ctx.shadowBlur = 0;
       }
     }
 

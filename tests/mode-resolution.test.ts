@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import { applyMode, resolveHardwareId, resolveSynthTheme } from '../src/core/mode-resolution.ts';
+import { applyMode, resolveAlbumView, resolveHardwareId, resolveSynthTheme, showsMidi } from '../src/core/mode-resolution.ts';
 import { ModeManifest, VisualizerSettings } from '../src/types/index.ts';
 
 const album: ModeManifest = {
@@ -11,17 +11,34 @@ const album: ModeManifest = {
 const standalone: ModeManifest = { id: 'solo', name: 'Solo', kind: 'standalone', input: 'midi', description: '' };
 const forced: ModeManifest = { ...standalone, id: 'forced', hardware: 'wing-upright' };
 
-const s = (patch: Partial<VisualizerSettings>) => ({ synthModel: 'diva-synth', waveformMode: false, ...patch }) as VisualizerSettings;
+const s = (patch: Partial<VisualizerSettings>) => ({ synthModel: 'diva-synth', albumView: 'midi', ...patch }) as VisualizerSettings;
+const audioOnly: ModeManifest = { ...standalone, id: 'audio', input: 'audio', hardware: 'tape-machine' };
 
-test('Mode resolution: waveform view forces the tape machine', () => {
-  assert.strictEqual(resolveHardwareId(album, s({ waveformMode: true }), true), 'tape-machine');
-  assert.strictEqual(resolveHardwareId(forced, s({ waveformMode: true }), true), 'tape-machine');
+test('Mode resolution: albums without MIDI are forced to the waveform view', () => {
+  assert.strictEqual(resolveAlbumView(s({ albumView: 'midi' }), false), 'waveform');
+  assert.strictEqual(resolveAlbumView(s({ albumView: 'midi' }), true), 'midi');
+  assert.strictEqual(resolveAlbumView(s({ albumView: 'waveform' }), true), 'waveform');
 });
 
-test('Mode resolution: MIDI view uses forced hardware, then the chosen synth, then st909', () => {
+test('Mode resolution: album waveform view uses the tape machine, MIDI view the chosen synth', () => {
+  assert.strictEqual(resolveHardwareId(album, s({ albumView: 'waveform' }), true), 'tape-machine');
+  assert.strictEqual(resolveHardwareId(album, s({}), false), 'tape-machine');
+  assert.strictEqual(resolveHardwareId(album, s({}), true), 'diva-synth');
+});
+
+test('Mode resolution: standalone modes ignore the album view', () => {
+  assert.strictEqual(resolveHardwareId(standalone, s({ albumView: 'waveform' }), true), 'diva-synth');
   assert.strictEqual(resolveHardwareId(forced, s({}), true), 'wing-upright');
-  assert.strictEqual(resolveHardwareId(standalone, s({}), true), 'diva-synth');
   assert.strictEqual(resolveHardwareId(standalone, s({ synthModel: undefined }), true), 'st909');
+  assert.strictEqual(resolveHardwareId(audioOnly, s({}), true), 'tape-machine');
+});
+
+test('Mode resolution: notes row follows what the frame shows', () => {
+  assert.strictEqual(showsMidi(album, s({}), true), true);
+  assert.strictEqual(showsMidi(album, s({ albumView: 'waveform' }), true), false);
+  assert.strictEqual(showsMidi(album, s({}), false), false);
+  assert.strictEqual(showsMidi(standalone, s({ albumView: 'waveform' }), true), true);
+  assert.strictEqual(showsMidi(audioOnly, s({}), true), false);
 });
 
 test('Mode resolution: synth theme and applyMode palette', () => {

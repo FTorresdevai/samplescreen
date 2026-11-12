@@ -21,7 +21,7 @@ import {
   RotateCcw,
   Check
 } from 'lucide-react';
-import { VisualizerSettings, ParsedMidi, ChordDisplay } from '../types';
+import { VisualizerSettings, ParsedMidi, ChordDisplay, AlbumView } from '../types';
 import { PALETTES } from '../engine/palettes';
 import { MODE_MANIFESTS, findManifest } from '../modes/registry';
 import { applyMode } from '../core/mode-resolution';
@@ -212,52 +212,6 @@ export const CustomizationSidebar: React.FC<CustomizationSidebarProps> = ({
       <div className="flex-1 overflow-y-auto p-4 space-y-5 text-xs">
 
         {/* ============================================================== */}
-        {/* 1. UNIVERSAL DISPLAY MODE (PIANO VS WAVEFORM)                 */}
-        {/* ============================================================== */}
-        <section className="space-y-2.5 p-3 bg-[#0c0e14] border border-amber-500/30 rounded-xl shadow-inner">
-          <div className="flex items-center justify-between text-[10px] font-mono font-bold tracking-widest text-zinc-400 uppercase">
-            <span className="flex items-center gap-1.5 text-white">
-              <Activity className="w-3.5 h-3.5 text-amber-400" />
-              DISPLAY MODE
-            </span>
-            <span className="text-amber-400 font-bold uppercase">
-              {settings.waveformMode ? 'Waveform' : 'Piano / MIDI'}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-1.5 p-1 bg-black/40 rounded-lg border border-white/[0.06]">
-            <button
-              onClick={() => onUpdate({ waveformMode: false })}
-              className={`py-1.5 px-2 rounded text-xs font-mono font-bold transition flex items-center justify-center gap-1.5 ${
-                !settings.waveformMode
-                  ? 'bg-amber-400 text-black shadow-md shadow-amber-400/20'
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-              }`}
-            >
-              <Music2 className="w-3.5 h-3.5" />
-              <span>Piano / MIDI</span>
-            </button>
-            <button
-              onClick={() => onUpdate({ waveformMode: true })}
-              className={`py-1.5 px-2 rounded text-xs font-mono font-bold transition flex items-center justify-center gap-1.5 ${
-                settings.waveformMode
-                  ? 'bg-amber-400 text-black shadow-md shadow-amber-400/20'
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-              }`}
-            >
-              <Activity className="w-3.5 h-3.5" />
-              <span>Waveform</span>
-            </button>
-          </div>
-
-          <p className="text-[10px] text-zinc-400 leading-tight">
-            {settings.waveformMode
-              ? 'Full-stage audio waveform visualizer. Piano keyboard and MIDI waterfall are completely removed.'
-              : 'Displays cascading MIDI note waterfall streaming onto the physical concert keyboard.'}
-          </p>
-        </section>
-
-        {/* ============================================================== */}
         {/* BEAT / AUDIO TRIMMER (BPM SNAPPED BY BARS)                    */}
         {/* ============================================================== */}
         <section className="space-y-3 p-3 bg-[#0c0e14] border border-amber-500/30 rounded-xl shadow-inner">
@@ -444,6 +398,39 @@ export const CustomizationSidebar: React.FC<CustomizationSidebarProps> = ({
               );
             })}
           </div>
+
+          {/* Album view: MIDI waterfall + keys, or full-stage audio waveform (albums only) */}
+          {findManifest(settings.modeId)?.kind === 'album' && (() => {
+            const hasMidi = (midiData?.notes?.length ?? 0) > 0;
+            const views: { value: AlbumView; label: string; Icon: typeof Music2 }[] = [
+              { value: 'midi', label: 'MIDI', Icon: Music2 },
+              { value: 'waveform', label: 'Audio', Icon: Activity },
+            ];
+            const current = hasMidi ? settings.albumView : 'waveform';
+            return (
+              <div className="space-y-1">
+                <div className="grid grid-cols-2 gap-1.5 p-1 bg-black/40 rounded-lg border border-white/[0.06]">
+                  {views.map(({ value, label, Icon }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      disabled={!hasMidi}
+                      onClick={() => onUpdate({ albumView: value })}
+                      className={`py-1.5 px-2 rounded text-xs font-mono font-bold transition flex items-center justify-center gap-1.5 disabled:cursor-not-allowed ${
+                        current === value
+                          ? 'bg-amber-400 text-black shadow-md shadow-amber-400/20'
+                          : 'text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:hover:bg-transparent disabled:hover:text-zinc-400'
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      <span>{label}</span>
+                    </button>
+                  ))}
+                </div>
+                {!hasMidi && <p className="text-[10px] text-zinc-500">Load a MIDI file to use the MIDI view.</p>}
+              </div>
+            );
+          })()}
         </section>
 
         {/* ============================================================== */}
