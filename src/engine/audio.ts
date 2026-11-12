@@ -1,5 +1,7 @@
-import { AudioAnalysis, ParsedMidi, VisualizerSettings } from '../types';
-import { TimelineTiming } from './midi';
+import { AudioAnalysis, MidiNote, ParsedMidi, VisualizerSettings } from '../types';
+import { TimelineTiming, isMidiTimelineOffset } from './midi';
+import { analyzeAudioWindow } from '../shared/fft';
+import { MAX_AUDIO_DURATION_SECONDS } from '../core/validator';
 
 export class AudioManager {
   private ctx: AudioContext | null = null;
@@ -24,6 +26,8 @@ export class AudioManager {
   private channelDataRight: Float32Array | null = null;
   private reusableOfflineWave: Uint8Array = new Uint8Array(1024);
   private reusableOfflineFFT: Uint8Array = new Uint8Array(512);
+  private offlinePcmWindow = new Float32Array(2048);
+  private offlinePrevSmoothed = new Float32Array(1024);
 
   constructor() {
     // AudioContext will be initialized on first user interaction
@@ -32,7 +36,7 @@ export class AudioManager {
   public init() {
     if (!this.ctx) {
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      this.ctx = new AudioCtx();
+      this.ctx = new AudioCtx({ latencyHint: 'interactive' });
       this.analyser = this.ctx.createAnalyser();
       this.analyser.fftSize = 2048;
       this.analyser.smoothingTimeConstant = 0.8;
@@ -45,9 +49,6 @@ export class AudioManager {
       this.fftData = new Uint8Array(new ArrayBuffer(this.analyser.frequencyBinCount));
       this.waveformData = new Uint8Array(new ArrayBuffer(this.analyser.frequencyBinCount));
     }
-    if (this.ctx.state === 'suspended') {
-      this.ctx.resume();
-    }
   }
 
   public getContext(): AudioContext | null {
@@ -59,10 +60,27 @@ export class AudioManager {
     return this.hasCustomFile;
   }
 
+  public clearCustomAudio() {
+    this.hasCustomFile = false;
+    this.originalRawBuffer = null;
+    this.buffer = null;
+    this.pauseOffset = 0;
+    this.loopEndTime = null;
+    this.channelDataLeft = null;
+    this.channelDataRight = null;
+    this.offlinePrevSmoothed.fill(0);
+    this.stopSource();
+    this.isPlayingState = false;
+  }
+
   public async loadAudioFile(file: File): Promise<AudioBuffer> {
     this.init();
     const arrayBuffer = await file.arrayBuffer();
     const decoded = await this.ctx!.decodeAudioData(arrayBuffer);
+    if (decoded.duration > MAX_AUDIO_DURATION_SECONDS) {
+      const minutes = Math.floor(decoded.duration / 60);
+      throw new Error(`Audio duration too long (${minutes} min). Maximum limit is 15 minutes to prevent memory overflow.`);
+    }
     this.hasCustomFile = true;
     this.originalRawBuffer = decoded;
     this.setBuffer(decoded);
@@ -171,11 +189,16 @@ export class AudioManager {
   }
 
   public setLoopEndTime(seconds: number | null) {
-    this.loopEndTime = seconds && seconds > 0 ? seconds : null;
-    if (this.isPlayingState) {
-      // Re-trigger play from current offset so Web Audio schedule matches new endpoint
-      const cur = this.getCurrentTime();
-      this.play(cur);
+    const target = seconds && seconds > 0 ? seconds : null;
+    if (this.loopEndTime === target) return;
+    this.loopEndTime = target;
+    if (this.source && this.isPlayingState) {
+      const maxAllowed = this.loopEndTime !== null && this.loopEndTime > 0
+        ? this.loopEndTime
+        : (this.buffer ? this.buffer.duration : 0);
+      if (this.isLooping) {
+        this.source.loopEnd = maxAllowed;
+      }
     }
   }
 
@@ -185,6 +208,17 @@ export class AudioManager {
 
   public setLooping(enabled: boolean) {
     this.isLooping = enabled;
+    if (this.source && this.isPlayingState) {
+      const maxAllowed = this.loopEndTime !== null && this.loopEndTime > 0
+        ? this.loopEndTime
+        : (this.buffer ? this.buffer.duration : 0);
+      this.source.loop = enabled;
+      if (enabled) {
+        this.source.loopStart = 0;
+        this.source.loopEnd = maxAllowed;
+        this.source.onended = null;
+      }
+    }
   }
 
   public isLoopingEnabled(): boolean {
@@ -195,11 +229,29 @@ export class AudioManager {
     return this.isPlayingState;
   }
 
-  public play(fromTime?: number) {
+  public async play(fromTime?: number): Promise<void> {
     if (!this.buffer) return;
     this.init();
+
+    // Ensure AudioContext is resumed before scheduling audio
+    if (this.ctx && this.ctx.state === 'suspended') {
+      try {
+        await this.ctx.resume();
+      } catch (err) {
+        console.warn('[SampleScreen] AudioContext resume error:', err);
+      }
+    }
+
     if (this.isPlayingState) {
       this.stopSource();
+    }
+
+    // Ensure gain is audible
+    if (this.gainNode && this.ctx) {
+      try {
+        this.gainNode.gain.cancelScheduledValues(this.ctx.currentTime);
+        this.gainNode.gain.setValueAtTime(0.9, this.ctx.currentTime);
+      } catch {}
     }
 
     const maxAllowed = this.loopEndTime !== null && this.loopEndTime > 0
@@ -226,27 +278,25 @@ export class AudioManager {
     this.source.connect(this.analyser!);
 
     this.startTime = this.ctx!.currentTime - this.pauseOffset;
-    
-    // Explicit duration tells browser Web Audio engine to STOP at exactly maxAllowed!
-    // Never allows audio to overflow into silence or reverb tail!
-    const effectiveDuration = Math.max(0.01, maxAllowed - this.pauseOffset);
-    this.source.start(0, this.pauseOffset, effectiveDuration);
-    this.isPlayingState = true;
 
-    this.source.onended = () => {
-      // Triggered when effectiveDuration finishes playing
-      if (this.isPlayingState) {
-        if (this.isLooping) {
-          // Seamless musical loop back to beginning
-          this.pauseOffset = 0;
-          this.play(0);
-        } else {
+    if (this.isLooping) {
+      this.source.loop = true;
+      this.source.loopStart = 0;
+      this.source.loopEnd = maxAllowed;
+      this.source.start(0, this.pauseOffset);
+    } else {
+      this.source.loop = false;
+      const effectiveDuration = Math.max(0.01, maxAllowed - this.pauseOffset);
+      this.source.start(0, this.pauseOffset, effectiveDuration);
+      this.source.onended = () => {
+        if (this.isPlayingState) {
           this.pauseOffset = maxAllowed;
           this.stopSource();
           this.isPlayingState = false;
         }
-      }
-    };
+      };
+    }
+    this.isPlayingState = true;
   }
 
   public pause() {
@@ -256,17 +306,31 @@ export class AudioManager {
       : (this.buffer ? this.buffer.duration : 0);
     this.pauseOffset = Math.min(this.getCurrentTime(), maxAllowed);
     this.isPlayingState = false;
+
+    // Immediately mute gain to cut any audible tail or hardware output buffer
+    if (this.gainNode && this.ctx) {
+      try {
+        this.gainNode.gain.cancelScheduledValues(this.ctx.currentTime);
+        this.gainNode.gain.setValueAtTime(0, this.ctx.currentTime);
+      } catch {}
+    }
+
     this.stopSource();
+
+    // Suspend AudioContext to immediately halt hardware processing without delay
+    if (this.ctx && this.ctx.state === 'running') {
+      this.ctx.suspend().catch(() => {});
+    }
   }
 
-  public seek(seconds: number) {
+  public seek(seconds: number, autoPlay: boolean = true) {
     const maxAllowed = this.loopEndTime !== null && this.loopEndTime > 0
       ? this.loopEndTime
       : this.getDuration();
     if (maxAllowed <= 0) return;
     const clamped = Math.max(0, Math.min(seconds, maxAllowed));
     this.pauseOffset = clamped;
-    if (this.isPlayingState) {
+    if (this.isPlayingState && autoPlay) {
       this.play(clamped);
     }
   }
@@ -344,7 +408,12 @@ export class AudioManager {
       };
     }
 
-    // Default resting values
+    // When paused or scrubbing: Compute deterministic analysis from buffer at current pause/scrub position!
+    if (this.buffer) {
+      return this.getOfflineAnalysis(this.getCurrentTime());
+    }
+
+    // Default resting values if no audio buffer loaded
     return {
       fft: new Uint8Array(512),
       waveform: new Uint8Array(512).fill(128),
@@ -355,9 +424,13 @@ export class AudioManager {
     };
   }
 
+  public resetOfflineAnalysisState() {
+    this.offlinePrevSmoothed.fill(0);
+  }
+
   /**
    * Deterministic Offline Analysis at any exact timestamp.
-   * Crucial for 60 FPS offline export without audio glitch or frame drop!
+   * Runs the exact same Radix-2 FFT and smoothing as AnalyserNode.
    */
   public getOfflineAnalysis(time: number, customBuffer?: AudioBuffer | null): AudioAnalysis {
     const activeBuf = customBuffer || this.buffer;
@@ -369,63 +442,39 @@ export class AudioManager {
     const centerSample = Math.floor(time * sampleRate);
     const windowSize = 2048;
     const halfWindow = windowSize / 2;
-    const startSample = Math.max(0, centerSample - halfWindow);
-
-    const tempWave = this.reusableOfflineWave;
-    let sumSquares = 0;
-    let bassApprox = 0;
-    let midApprox = 0;
-    let trebleApprox = 0;
+    const startSample = centerSample - halfWindow;
 
     const left = customBuffer ? customBuffer.getChannelData(0) : this.channelDataLeft!;
     const right = (customBuffer && customBuffer.numberOfChannels > 1)
       ? customBuffer.getChannelData(1)
       : (this.channelDataRight || left);
 
-    for (let i = 0; i < 1024; i++) {
-      const idx = startSample + i * 2;
+    const pcmWindow = this.offlinePcmWindow;
+    const tempWave = this.reusableOfflineWave;
+
+    for (let i = 0; i < windowSize; i++) {
+      const idx = startSample + i;
       let val = 0;
-      if (idx < left.length) {
+      if (idx >= 0 && idx < left.length) {
         const raw = (left[idx] + right[idx]) * 0.5;
         val = Number.isFinite(raw) ? raw : 0;
       }
-      tempWave[i] = Math.max(0, Math.min(255, Math.floor((val + 1) * 127.5)));
-      sumSquares += val * val;
+      pcmWindow[i] = val;
 
-      // Approximate frequency energy through simple gradient & diff
-      if (i > 1) {
-        const prev = (left[idx - 2] + right[idx - 2]) * 0.5;
-        const diff = Math.abs(val - (Number.isFinite(prev) ? prev : 0));
-        trebleApprox += Number.isFinite(diff) ? diff : 0;
+      if (i < 1024) {
+        tempWave[i] = Math.max(0, Math.min(255, Math.floor((val + 1) * 127.5)));
       }
-      bassApprox += Math.abs(val);
     }
 
-    const safeSumSquares = Number.isFinite(sumSquares) ? sumSquares : 0;
-    const safeBassApprox = Number.isFinite(bassApprox) ? bassApprox : 0;
-    const safeTrebleApprox = Number.isFinite(trebleApprox) ? trebleApprox : 0;
-
-    const rms = Math.min(1, Math.sqrt(safeSumSquares / 1024) * 2.5) || 0;
-    const bass = Math.min(1, (safeBassApprox / 1024) * 2.8) || 0;
-    const treble = Math.min(1, (safeTrebleApprox / 1024) * 4.0) || 0;
-    const mid = Math.min(1, (rms + bass * 0.4 + treble * 0.4) * 0.8) || 0;
-
-    // Synthesize pseudo-FFT bins for visualization during offline frame rendering
-    const pseudoFFT = this.reusableOfflineFFT;
-    for (let i = 0; i < 512; i++) {
-      let weight = 0;
-      if (i < 30) weight = bass * 220;
-      else if (i < 150) weight = mid * 180;
-      else weight = treble * 140;
-
-      const safeTime = Number.isFinite(time) ? time : 0;
-      const noise = (Math.sin(i * 12.3 + safeTime * 40) + 1) * 0.2;
-      const binVal = Math.floor(weight * (0.8 + noise));
-      pseudoFFT[i] = Math.max(0, Math.min(255, Number.isFinite(binVal) ? binVal : 0));
-    }
+    const { bass, mid, treble, rms } = analyzeAudioWindow(
+      pcmWindow,
+      this.offlinePrevSmoothed,
+      this.reusableOfflineFFT,
+      0.8
+    );
 
     return {
-      fft: pseudoFFT,
+      fft: this.reusableOfflineFFT,
       waveform: tempWave,
       bass,
       mid,
@@ -465,45 +514,6 @@ export class AudioManager {
     const left = buffer.getChannelData(0);
     const right = buffer.getChannelData(1);
 
-    const renderMidiNotesToBuffer = (notes: typeof mainMidi.notes, timeOffsetSecs: number) => {
-      notes.forEach(note => {
-        const startSample = Math.floor((note.time + timeOffsetSecs) * sampleRate);
-        const noteSamples = Math.floor(note.duration * sampleRate);
-        const freq = 440 * Math.pow(2, (note.midi - 69) / 12);
-
-        // Stereo pan based on pitch
-        const pan = (note.midi - 60) / 40; // -1 to 1
-        const leftGain = Math.cos((pan + 1) * Math.PI / 4) * (note.velocity || 0.8) * 0.25;
-        const rightGain = Math.sin((pan + 1) * Math.PI / 4) * (note.velocity || 0.8) * 0.25;
-
-        for (let i = 0; i < noteSamples; i++) {
-          const sampleIdx = startSample + i;
-          if (sampleIdx >= numSamples) break;
-
-          const t = i / sampleRate;
-          // ADSR Envelope
-          const attack = 0.04;
-          const release = 0.2;
-          let env = 1.0;
-          if (t < attack) env = t / attack;
-          else if (t > note.duration - release) {
-            env = Math.max(0, (note.duration - t) / release);
-          }
-
-          // Warm dual-saw + triangle analog voice
-          const osc1 = ((t * freq) % 1) * 2 - 1;
-          const osc2 = ((t * (freq * 1.003)) % 1) * 2 - 1; // slight detune
-          const tri = Math.asin(Math.sin(2 * Math.PI * freq * t)) * (2 / Math.PI);
-
-          // Lowpass filter emulation (warm harmonics)
-          const raw = (osc1 * 0.4 + osc2 * 0.4 + tri * 0.3) * env;
-
-          left[sampleIdx] += raw * leftGain;
-          right[sampleIdx] += raw * rightGain;
-        }
-      });
-    };
-
     // 1. Synthesize Intro Notes (0 to introDuration, clamped so it resolves at the drop)
     const clampedIntroNotes = introMidi.notes
       .filter(n => n.time < introDuration)
@@ -511,17 +521,16 @@ export class AudioManager {
         ...n,
         duration: Math.min(n.duration, Math.max(0.08, introDuration - n.time)),
       }));
-    renderMidiNotesToBuffer(clampedIntroNotes, 0);
+    synthesizeNotesToChannels(left, right, clampedIntroNotes, 0, sampleRate);
 
     // 2. Synthesize Main Notes starting precisely at introDuration
-    const firstMainTime = mainMidi.notes.length > 0 ? Math.min(...mainMidi.notes.map(n => n.time)) : 0;
-    const isAlreadyTimelineOffset = Math.abs(firstMainTime - introDuration) < 0.5;
+    const { isOffset: isAlreadyTimelineOffset, firstNoteTime: firstMainTime } = isMidiTimelineOffset(mainMidi.notes, introDuration);
     const mainOffset = isAlreadyTimelineOffset ? (introDuration - firstMainTime) : introDuration;
-    renderMidiNotesToBuffer(mainMidi.notes, mainOffset);
+    synthesizeNotesToChannels(left, right, mainMidi.notes, mainOffset, sampleRate);
 
-    // 2.1 Add Analog Filtered Noise Riser & Reverse Swell on the final bar of the intro for an ultra-smooth drop transition
+    // 2.1 Add Analog Filtered Noise Riser on final bar of intro
     const lastBarStartSec = Math.max(0, introDuration - (secondsPerBeat * 4));
-    const riserStartSec = lastBarStartSec + secondsPerBeat * 1.5; // Starts 2.5 beats before drop
+    const riserStartSec = lastBarStartSec + secondsPerBeat * 1.5;
     const riserDur = introDuration - riserStartSec;
     const riserSamples = Math.floor(riserDur * sampleRate);
     const riserStartSample = Math.floor(riserStartSec * sampleRate);
@@ -529,10 +538,8 @@ export class AudioManager {
     for (let i = 0; i < riserSamples; i++) {
       const sIdx = riserStartSample + i;
       if (sIdx >= numSamples) break;
-      const tNorm = i / riserSamples; // 0 to 1
-      // Exponential rise
+      const tNorm = i / riserSamples;
       const amp = Math.pow(tNorm, 2.2) * 0.16;
-      // White noise with pitch-sweeping bandpass filter emulation
       const noise = (Math.random() * 2 - 1);
       const sweepFreq = 300 + Math.pow(tNorm, 3) * 3200;
       const resonance = Math.sin(2 * Math.PI * sweepFreq * (i / sampleRate));
@@ -544,39 +551,13 @@ export class AudioManager {
 
     // 3. Synthesize 808 Sub Kicks (Drop on bar downbeats)
     const totalBars = actualIntroBars + actualMainBars;
-
-    for (let bar = 0; bar < totalBars; bar++) {
-      // Intro has softer kick, Main loop drops full heavy 808
-      const isIntroBar = bar < actualIntroBars;
-      const kickVol = isIntroBar ? 0.18 : 0.40;
-      const beatTimes = isIntroBar ? [bar * 4] : [bar * 4, bar * 4 + 2.5];
-
-      beatTimes.forEach(b => {
-        const startTime = b * secondsPerBeat;
-        const kickStart = Math.floor(startTime * sampleRate);
-        const kickLen = Math.floor(0.45 * sampleRate);
-
-        for (let i = 0; i < kickLen; i++) {
-          const sIdx = kickStart + i;
-          if (sIdx >= numSamples) break;
-          const t = i / sampleRate;
-          const kFreq = 85 * Math.exp(-t * 9) + 38;
-          const kEnv = Math.exp(-t * 7);
-          const kickVal = Math.sin(2 * Math.PI * kFreq * t) * kEnv * kickVol;
-
-          left[sIdx] += kickVal;
-          right[sIdx] += kickVal;
-        }
-      });
-    }
+    synthesizeKicksToChannels(left, right, bpm, totalBars, sampleRate, 0, actualIntroBars);
 
     // Soft clip limiter
-    for (let i = 0; i < numSamples; i++) {
-      left[i] = Math.tanh(left[i] * 1.2);
-      right[i] = Math.tanh(right[i] * 1.2);
-    }
+    applySoftClipLimiter(left, right);
 
     this.setBuffer(buffer);
+    this.setLoopEndTime(totalDuration);
     return buffer;
   }
 
@@ -594,75 +575,13 @@ export class AudioManager {
     const left = buffer.getChannelData(0);
     const right = buffer.getChannelData(1);
 
-    // Synthesize each note into buffer
-    midi.notes.forEach(note => {
-      const startSample = Math.floor(note.time * sampleRate);
-      const noteSamples = Math.floor(note.duration * sampleRate);
-      const freq = 440 * Math.pow(2, (note.midi - 69) / 12);
-
-      // Stereo pan based on pitch
-      const pan = (note.midi - 60) / 40; // -1 to 1
-      const leftGain = Math.cos((pan + 1) * Math.PI / 4) * (note.velocity || 0.8) * 0.25;
-      const rightGain = Math.sin((pan + 1) * Math.PI / 4) * (note.velocity || 0.8) * 0.25;
-
-      for (let i = 0; i < noteSamples; i++) {
-        const sampleIdx = startSample + i;
-        if (sampleIdx >= numSamples) break;
-
-        const t = i / sampleRate;
-        // ADSR Envelope
-        const attack = 0.04;
-        const release = 0.2;
-        let env = 1.0;
-        if (t < attack) env = t / attack;
-        else if (t > note.duration - release) {
-          env = Math.max(0, (note.duration - t) / release);
-        }
-
-        // Warm dual-saw + triangle analog voice
-        const osc1 = ((t * freq) % 1) * 2 - 1;
-        const osc2 = ((t * (freq * 1.003)) % 1) * 2 - 1; // slight detune
-        const tri = Math.asin(Math.sin(2 * Math.PI * freq * t)) * (2 / Math.PI);
-
-        // Lowpass filter emulation (warm harmonics)
-        const raw = (osc1 * 0.4 + osc2 * 0.4 + tri * 0.3) * env;
-
-        left[sampleIdx] += raw * leftGain;
-        right[sampleIdx] += raw * rightGain;
-      }
-    });
-
-    // Add gentle 808 sub kick on bar downbeats for audio orb & FFT reactivity
-    const secondsPerBeat = 60 / midi.bpm;
-    const totalBars = midi.totalBars;
-    for (let bar = 0; bar < totalBars; bar++) {
-      const beatTimes = [bar * 4, bar * 4 + 2.5]; // downbeat & syncopated 808
-      beatTimes.forEach(b => {
-        const startTime = b * secondsPerBeat;
-        const kickStart = Math.floor(startTime * sampleRate);
-        const kickLen = Math.floor(0.45 * sampleRate);
-
-        for (let i = 0; i < kickLen; i++) {
-          const sIdx = kickStart + i;
-          if (sIdx >= numSamples) break;
-          const t = i / sampleRate;
-          const kFreq = 85 * Math.exp(-t * 9) + 38; // pitch drop
-          const kEnv = Math.exp(-t * 7);
-          const kickVal = Math.sin(2 * Math.PI * kFreq * t) * kEnv * 0.38;
-
-          left[sIdx] += kickVal;
-          right[sIdx] += kickVal;
-        }
-      });
-    }
-
-    // Soft clip limiter to prevent distortion
-    for (let i = 0; i < numSamples; i++) {
-      left[i] = Math.tanh(left[i] * 1.2);
-      right[i] = Math.tanh(right[i] * 1.2);
-    }
+    // Synthesize notes and kicks
+    synthesizeNotesToChannels(left, right, midi.notes, 0, sampleRate);
+    synthesizeKicksToChannels(left, right, midi.bpm || 80, midi.totalBars || 8, sampleRate, 0, 0);
+    applySoftClipLimiter(left, right);
 
     this.setBuffer(buffer);
+    this.setLoopEndTime(duration);
     return buffer;
   }
 
@@ -801,6 +720,91 @@ export class AudioManager {
     }
 
     return target;
+  }
+}
+
+function synthesizeNotesToChannels(
+  left: Float32Array,
+  right: Float32Array,
+  notes: MidiNote[],
+  timeOffsetSecs: number,
+  sampleRate: number
+) {
+  const numSamples = left.length;
+  notes.forEach(note => {
+    const startSample = Math.floor((note.time + timeOffsetSecs) * sampleRate);
+    const noteSamples = Math.floor(note.duration * sampleRate);
+    const freq = 440 * Math.pow(2, (note.midi - 69) / 12);
+
+    const pan = (note.midi - 60) / 40; // -1 to 1
+    const leftGain = Math.cos((pan + 1) * Math.PI / 4) * (note.velocity || 0.8) * 0.25;
+    const rightGain = Math.sin((pan + 1) * Math.PI / 4) * (note.velocity || 0.8) * 0.25;
+
+    for (let i = 0; i < noteSamples; i++) {
+      const sampleIdx = startSample + i;
+      if (sampleIdx >= numSamples) break;
+
+      const t = i / sampleRate;
+      const attack = 0.04;
+      const release = 0.2;
+      let env = 1.0;
+      if (t < attack) env = t / attack;
+      else if (t > note.duration - release) {
+        env = Math.max(0, (note.duration - t) / release);
+      }
+
+      const osc1 = ((t * freq) % 1) * 2 - 1;
+      const osc2 = ((t * (freq * 1.003)) % 1) * 2 - 1;
+      const tri = Math.asin(Math.sin(2 * Math.PI * freq * t)) * (2 / Math.PI);
+      const raw = (osc1 * 0.4 + osc2 * 0.4 + tri * 0.3) * env;
+
+      left[sampleIdx] += raw * leftGain;
+      right[sampleIdx] += raw * rightGain;
+    }
+  });
+}
+
+function synthesizeKicksToChannels(
+  left: Float32Array,
+  right: Float32Array,
+  bpm: number,
+  totalBars: number,
+  sampleRate: number,
+  offsetSecs: number = 0,
+  introBars: number = 0
+) {
+  const numSamples = left.length;
+  const secondsPerBeat = 60 / bpm;
+  for (let bar = 0; bar < totalBars; bar++) {
+    const isIntroBar = bar < introBars;
+    const kickVol = isIntroBar ? 0.18 : 0.40;
+    const beatTimes = isIntroBar ? [bar * 4] : [bar * 4, bar * 4 + 2.5];
+
+    beatTimes.forEach(b => {
+      const startTime = offsetSecs + b * secondsPerBeat;
+      const kickStart = Math.floor(startTime * sampleRate);
+      const kickLen = Math.floor(0.45 * sampleRate);
+
+      for (let i = 0; i < kickLen; i++) {
+        const sIdx = kickStart + i;
+        if (sIdx >= numSamples) break;
+        const t = i / sampleRate;
+        const kFreq = 85 * Math.exp(-t * 9) + 38;
+        const kEnv = Math.exp(-t * 7);
+        const kickVal = Math.sin(2 * Math.PI * kFreq * t) * kEnv * kickVol;
+
+        left[sIdx] += kickVal;
+        right[sIdx] += kickVal;
+      }
+    });
+  }
+}
+
+function applySoftClipLimiter(left: Float32Array, right: Float32Array) {
+  const numSamples = left.length;
+  for (let i = 0; i < numSamples; i++) {
+    left[i] = Math.tanh(left[i] * 1.2);
+    right[i] = Math.tanh(right[i] * 1.2);
   }
 }
 

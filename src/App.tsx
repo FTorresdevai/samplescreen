@@ -11,6 +11,7 @@ import { parseMidiFile, createDemoMidi, createDemoIntroMidi, getTimelineTiming }
 import { VideoExporter, ExportProgress } from './engine/exporter';
 import { ParsedMidi, VisualizerSettings } from './types';
 import { validateAudioFile, validateMidiFile, sanitizeText } from './core/validator';
+import { MODEL_REGISTRY } from './models/registry';
 
 export const App: React.FC = () => {
   // References
@@ -20,7 +21,8 @@ export const App: React.FC = () => {
 
   // URL params initialization for deep-linking and visual testing
   const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-  const initialModel = (urlParams?.get('model') as any) || 'take-care';
+  const rawModel = urlParams?.get('model');
+  const initialModel = (rawModel && rawModel in MODEL_REGISTRY) ? rawModel : 'take-care';
   const initialWaveform = urlParams?.get('waveform') === 'true';
 
   // Settings State with complete feature set matching reference video
@@ -82,6 +84,11 @@ export const App: React.FC = () => {
   const [midiFileName, setMidiFileName] = useState<string | null>('demo_progression.mid');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true); // Open by default!
 
+  // Explicit source state tracking ('demo' | 'file')
+  const [audioSource, setAudioSource] = useState<'demo' | 'file'>('demo');
+  const [midiSource, setMidiSource] = useState<'demo' | 'file'>('demo');
+  const [introMidiSource, setIntroMidiSource] = useState<'demo' | 'file'>('demo');
+
   // Export State
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -104,6 +111,20 @@ export const App: React.FC = () => {
     );
   }, []);
 
+  // Debounced audio regeneration for demo synthesizer (prevents UI freeze on rapid BPM input typing)
+  useEffect(() => {
+    if (audioSource !== 'demo') return;
+    const timer = setTimeout(() => {
+      audioManager.generateCombinedAudioBuffer(
+        settings.enableIntro ? introMidiData : null,
+        midiData,
+        settings.enableIntro,
+        settings.introBars
+      );
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [audioSource, settings.enableIntro, settings.introBars, settings.bpm, settings.loopBars, midiData, introMidiData]);
+
   const handleUpdateSettings = (updates: Partial<VisualizerSettings>) => {
     // Sanitize string inputs against XSS and excessive length
     const sanitizedUpdates = { ...updates };
@@ -117,44 +138,32 @@ export const App: React.FC = () => {
       sanitizedUpdates.watermark = sanitizeText(sanitizedUpdates.watermark, 96);
     }
 
-    setSettings((prev) => {
-      const next = { ...prev, ...sanitizedUpdates };
+    // Pure state updater
+    setSettings((prev) => ({ ...prev, ...sanitizedUpdates }));
 
-      const loopBarsChanged = sanitizedUpdates.loopBars && sanitizedUpdates.loopBars !== prev.loopBars;
-      const introToggled = sanitizedUpdates.enableIntro !== undefined && sanitizedUpdates.enableIntro !== prev.enableIntro;
-      const introBarsChanged = sanitizedUpdates.introBars !== undefined && sanitizedUpdates.introBars !== prev.introBars;
-      const bpmChanged = sanitizedUpdates.bpm !== undefined && sanitizedUpdates.bpm !== prev.bpm;
+    // Side-effects handled outside the functional updater
+    if (sanitizedUpdates.loopBars && sanitizedUpdates.loopBars !== settings.loopBars && midiSource === 'demo') {
+      const currentMidi = createDemoMidi(sanitizedUpdates.loopBars);
+      setMidiData(currentMidi);
+    }
 
-      let currentMidi = midiData;
-      if (loopBarsChanged && (!audioFileName || audioFileName.startsWith('demo_'))) {
-        currentMidi = createDemoMidi(sanitizedUpdates.loopBars);
-        setMidiData(currentMidi);
-      }
-
-      let currentIntro = introMidiData;
-      if ((introBarsChanged || bpmChanged) && (!introMidiFileName || introMidiFileName.startsWith('demo_'))) {
-        currentIntro = createDemoIntroMidi(next.introBars, next.bpm);
-        setIntroMidiData(currentIntro);
-      }
-
-      if ((loopBarsChanged || introToggled || introBarsChanged || bpmChanged) && (!audioFileName || audioFileName.startsWith('demo_'))) {
-        audioManager.generateCombinedAudioBuffer(
-          next.enableIntro ? currentIntro : null,
-          currentMidi,
-          next.enableIntro,
-          next.introBars
-        );
-      }
-
-      return next;
-    });
+    if ((sanitizedUpdates.introBars !== undefined || sanitizedUpdates.bpm !== undefined) && introMidiSource === 'demo') {
+      const targetBars = sanitizedUpdates.introBars ?? settings.introBars;
+      const targetBpm = sanitizedUpdates.bpm ?? settings.bpm;
+      const currentIntro = createDemoIntroMidi(targetBars, targetBpm);
+      setIntroMidiData(currentIntro);
+    }
   };
 
   const handleLoadDemo = () => {
+    audioManager.clearCustomAudio();
     const demo = createDemoMidi();
     setMidiData(demo);
     const demoIntro = createDemoIntroMidi(settings.introBars, 80);
     setIntroMidiData(demoIntro);
+    setAudioSource('demo');
+    setMidiSource('demo');
+    setIntroMidiSource('demo');
     setAudioFileName('demo_synth_chords.wav');
     setMidiFileName('demo_progression.mid');
     setIntroMidiFileName('demo_intro_pads.mid');
@@ -164,6 +173,10 @@ export const App: React.FC = () => {
       bpm: 80,
       key: 'CMIN',
       producerHandle: 'PRODBYSERROT',
+      isAudioTrimmed: false,
+      audioTrimStartBar: 1,
+      audioTrimBars: 8,
+      loopBars: 8,
     }));
     audioManager.generateCombinedAudioBuffer(
       settings.enableIntro ? demoIntro : null,
@@ -176,8 +189,9 @@ export const App: React.FC = () => {
   const handleLoadDemoIntro = () => {
     const demoIntro = createDemoIntroMidi(settings.introBars, settings.bpm);
     setIntroMidiData(demoIntro);
+    setIntroMidiSource('demo');
     setIntroMidiFileName('demo_intro_pads.mid');
-    if (settings.enableIntro && (!audioFileName || audioFileName.startsWith('demo_'))) {
+    if (settings.enableIntro && audioSource === 'demo') {
       audioManager.generateCombinedAudioBuffer(demoIntro, midiData, true, settings.introBars);
     }
   };
@@ -191,6 +205,7 @@ export const App: React.FC = () => {
 
     try {
       const decoded = await audioManager.loadAudioFile(file);
+      setAudioSource('file');
       setAudioFileName(file.name);
       setAudioDuration(decoded.duration);
 
@@ -199,8 +214,8 @@ export const App: React.FC = () => {
       const totalBars = Math.max(1, Math.round(decoded.duration / secondsPerBar));
       const defaultBars = Math.min(16, totalBars);
 
-      // If producer has not loaded a custom MIDI yet, clear the demo MIDI and switch to Waveform Mode
-      const isCustomMidi = midiFileName && !midiFileName.startsWith('demo_');
+      // If producer has not loaded a custom MIDI yet, switch to Waveform Mode
+      const isCustomMidi = midiSource === 'file';
       let activeMidi = midiData;
       let activeIntro = introMidiData;
 
@@ -232,7 +247,7 @@ export const App: React.FC = () => {
       audioManager.setLoopEndTime(timing.totalDuration);
     } catch (err) {
       console.error('Failed to decode audio file:', err);
-      alert('Unable to decode audio file. Please ensure it is a valid WAV or MP3 file.');
+      alert(err instanceof Error ? err.message : 'Unable to decode audio file. Please ensure it is a valid WAV or MP3 file.');
     }
   };
 
@@ -278,6 +293,7 @@ export const App: React.FC = () => {
     try {
       const parsed = await parseMidiFile(file);
       setMidiData(parsed);
+      setMidiSource('file');
       setMidiFileName(file.name);
       setSettings((prev) => ({
         ...prev,
@@ -286,7 +302,7 @@ export const App: React.FC = () => {
         loopBars: parsed.totalBars,
         waveformMode: false, // Activating MIDI file defaults to piano / sequencer mode
       }));
-      if (!audioFileName || audioFileName.startsWith('demo_')) {
+      if (audioSource === 'demo') {
         audioManager.generateCombinedAudioBuffer(
           settings.enableIntro ? introMidiData : null,
           parsed,
@@ -310,8 +326,9 @@ export const App: React.FC = () => {
     try {
       const parsed = await parseMidiFile(file);
       setIntroMidiData(parsed);
+      setIntroMidiSource('file');
       setIntroMidiFileName(file.name);
-      if (settings.enableIntro && (!audioFileName || audioFileName.startsWith('demo_'))) {
+      if (settings.enableIntro && audioSource === 'demo') {
         audioManager.generateCombinedAudioBuffer(parsed, midiData, true, settings.introBars);
       }
     } catch (err) {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Play, Pause, RotateCcw } from 'lucide-react';
 import { AudioManager } from '../engine/audio';
 
@@ -19,13 +19,17 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  const isScrubbingRef = useRef(false);
+  const wasPlayingRef = useRef(false);
 
-  // Sync state with audio engine
+  // Sync state with audio engine (only when not actively dragging the slider)
   useEffect(() => {
     let animId: number;
     const update = () => {
       setIsPlaying(audioManager.isPlaying());
-      setCurrentTime(audioManager.getCurrentTime());
+      if (!isScrubbingRef.current) {
+        setCurrentTime(audioManager.getCurrentTime());
+      }
       animId = requestAnimationFrame(update);
     };
     animId = requestAnimationFrame(update);
@@ -56,20 +60,48 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
       audioManager.pause();
       setIsPlaying(false);
     } else {
-      audioManager.play();
+      audioManager.play().catch((err) => console.error('[Playback] Play error:', err));
       setIsPlaying(true);
     }
   };
 
+  const handlePointerDown = () => {
+    isScrubbingRef.current = true;
+    wasPlayingRef.current = audioManager.isPlaying();
+    if (wasPlayingRef.current) {
+      audioManager.pause();
+    }
+  };
+
+  const handlePointerUp = () => {
+    if (!isScrubbingRef.current) return;
+    isScrubbingRef.current = false;
+    if (wasPlayingRef.current) {
+      audioManager.play(currentTime).catch((err) => console.error('[Playback] Resume error:', err));
+    }
+  };
+
+  // Global window pointerup listener so scrubbing ends smoothly even if released outside slider
+  useEffect(() => {
+    const handleGlobalPointerUp = () => {
+      if (isScrubbingRef.current) {
+        handlePointerUp();
+      }
+    };
+    window.addEventListener('pointerup', handleGlobalPointerUp);
+    return () => window.removeEventListener('pointerup', handleGlobalPointerUp);
+  }, [currentTime]);
+
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const time = parseFloat(e.target.value);
-    audioManager.seek(time);
     setCurrentTime(time);
+    // Live seek without audio restart if scrubbing, guaranteeing 60 FPS visual tracking
+    audioManager.seek(time, false);
   };
 
   const handleRestart = () => {
     audioManager.seek(0);
-    audioManager.play(0);
+    audioManager.play(0).catch((err) => console.error('[Playback] Play error:', err));
     setIsPlaying(true);
   };
 
@@ -113,6 +145,8 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
             max={duration || 16}
             step={0.01}
             value={Math.min(currentTime, duration || 16)}
+            onPointerDown={handlePointerDown}
+            onPointerUp={handlePointerUp}
             onChange={handleSeek}
             className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-amber-400 group-hover:h-1.5 transition-all"
           />

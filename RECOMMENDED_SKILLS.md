@@ -1,119 +1,119 @@
-# 🛠️ Guia de Agent Skills Recomendadas para a Equipa
+# 🛠️ Recommended Agent Skills Guide for the Team
 
-Este documento define o conjunto de **Agent Skills** recomendadas para o nosso fluxo de trabalho de desenvolvimento com assistentes de IA (como Google Antigravity, Claude Code, Cursor e GitHub Copilot).
-
----
-
-## 🎯 Por que usamos Agent Skills?
-
-As **Agent Skills** utilizam o padrão aberto de *progressive disclosure* baseado em ficheiros `SKILL.md`. Em vez de usar instruções genéricas ou prompts longos que poluem a janela de contexto:
-- O agente só carrega as instruções detalhadas quando a tarefa realmente exige.
-- Garante que a IA segue padrões rigorosos de engenharia (TDD, testes, revisões de segurança, commits semânticos).
-- Unifica a qualidade do código produzido por qualquer elemento da equipa.
+This document outlines the recommended suite of **Agent Skills** for our development workflow using AI coding assistants (such as Google Antigravity, Claude Code, Cursor, and GitHub Copilot).
 
 ---
 
-## 🚀 Como Instalar as Skills
+## 🎯 Why Do We Use Agent Skills?
 
-### Opção A: Instalação Global na sua Máquina (Recomendado para todos os projetos)
+**Agent Skills** leverage the open *progressive disclosure* standard based on `SKILL.md` files. Rather than relying on generic instructions or long system prompts that pollute the context window:
+- The AI assistant only retrieves detailed instructions when a specific task requires them.
+- Ensures the AI adheres to strict engineering practices (TDD, testing, security audits, semantic commits).
+- Standardizes code quality across all team members.
 
-#### Para Antigravity / Gemini CLI:
-As skills globais residem no diretório:
+---
+
+## 🚀 How to Install Skills
+
+### Option A: Global Installation on Your Machine (Recommended for all projects)
+
+#### For Antigravity / Gemini CLI:
+Global skills reside in:
 ```bash
 ~/.gemini/config/skills/
 ```
 
-Para clonar e instalar o conjunto completo de engenharia de software de uma só vez:
+To clone and install the complete software engineering skills suite at once:
 ```bash
-# Criar pasta se não existir
+# Create directory if it does not exist
 mkdir -p ~/.gemini/config/skills
 
-# Clonar o repositório temporariamente e copiar as skills
+# Clone temporarily and copy skills
 git clone --depth 1 https://github.com/addyosmani/agent-skills.git /tmp/addyosmani-agent-skills
 cp -r /tmp/addyosmani-agent-skills/skills/* ~/.gemini/config/skills/
 rm -rf /tmp/addyosmani-agent-skills
 ```
 
-#### Para Claude Code / outros agentes via CLI oficial:
+#### For Claude Code / other agents via official CLI:
 ```bash
 npx skills add addyosmani/agent-skills
 ```
 
 ---
 
-### Opção B: Instalação no Nível do Repositório / Workspace
+### Option B: Repository / Workspace Level Installation
 
-Para garantir que qualquer pessoa (ou agente) que abra este repositório tenha acesso às mesmas regras e procedimentos, as skills podem ser colocadas na pasta do projeto:
+To ensure that anyone (or any agent) opening this repository shares the exact same rules and procedures, skills can be placed in the project repository:
 ```text
-.agents/skills/<nome-da-skill>/SKILL.md
+.agents/skills/<skill-name>/SKILL.md
 ```
-Desta forma, ao fazer commit das pastas em `.agents/skills/`, todos os programadores partilham automaticamente as mesmas diretrizes.
+Committing `.agents/skills/` ensures all engineers and automated agents share identical guidelines.
 
 ---
 
-## 📚 Catálogo de Skills Recomendadas
+## 📚 Recommended Skills Catalog
 
-As skills abaixo foram selecionadas do repositório [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills) e [google/skills](https://github.com/google/skills).
+The skills below are curated from [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills) and [google/skills](https://github.com/google/skills).
 
-### 1. Planeamento e Alinhamento de Requisitos
+### 1. Planning and Requirements Alignment
 
-| Skill | Quando usar | Como pedir ao Agente |
+| Skill | When to Use | How to Prompt the Agent |
 | :--- | :--- | :--- |
-| **`interview-me`** | Antes de iniciar uma funcionalidade complexa. O agente faz perguntas de clarificação antes de tocar no código. | *"Usa a skill interview-me para clarificar os requisitos da feature X."* |
-| **`spec-driven-development`** | Para escrever uma especificação técnica ou PRD claro antes da implementação. | *"Gera uma especificação técnica antes de começarmos a codificar."* |
-| **`planning-and-task-breakdown`** | Para decompor uma tarefa grande em passos incrementais com critérios de verificação. | *"Divide a tarefa em passos atómicos com checklist de validação."* |
+| **`interview-me`** | Before starting a complex feature. The agent asks clarifying questions before writing code. | *"Use the interview-me skill to clarify requirements for feature X."* |
+| **`spec-driven-development`** | To draft a clear technical specification or PRD prior to implementation. | *"Generate a technical specification before we begin coding."* |
+| **`planning-and-task-breakdown`** | To break down a large task into atomic, verifiable milestones. | *"Decompose this task into incremental steps with validation checklists."* |
 
 ---
 
-### 2. Desenvolvimento com Rigor e Sem Alucinações
+### 2. High-Integrity & Anti-Hallucination Development
 
-| Skill | Quando usar | Como pedir ao Agente |
+| Skill | When to Use | How to Prompt the Agent |
 | :--- | :--- | :--- |
-| **`test-driven-development`** | Obrigatório para novas regras de negócio e lógicas sensíveis. Segue o ciclo Red-Green-Refactor. | *"Implementa esta funcionalidade seguindo Test-Driven Development (TDD)."* |
-| **`incremental-implementation`** | Para evitar alterações maciças ou reescritas de centenas de linhas de uma só vez. | *"Faz a implementação em pequenos incrementos testáveis."* |
-| **`doubt-driven-development`** | Obriga o agente a parar e verificar a realidade do código e ficheiros em vez de tentar adivinhar soluções. | *"Valida as tuas hipóteses diretamente no código antes de sugerir mudanças."* |
-| **`debugging-and-error-recovery`** | Diagnóstico sistemático de erros (isolamento de causa raiz e teste de regressão). | *"Depura este erro procurando a causa raiz e cria um teste de regressão."* |
+| **`test-driven-development`** | Mandatory for new business logic and sensitive algorithms. Follows Red-Green-Refactor. | *"Implement this feature following Test-Driven Development (TDD)."* |
+| **`incremental-implementation`** | Prevents giant code rewrites by delivering thin, testable slices. | *"Deliver this implementation in small testable increments."* |
+| **`doubt-driven-development`** | Compels the agent to verify code and filesystem reality rather than guessing solutions. | *"Verify your assumptions directly against the codebase before suggesting edits."* |
+| **`debugging-and-error-recovery`** | Systematic root-cause diagnosis and regression prevention. | *"Debug this issue by finding the root cause and creating a regression test."* |
 
 ---
 
-### 3. Qualidade, Revisão e Segurança
+### 3. Quality, Code Review and Security
 
-| Skill | Quando usar | Como pedir ao Agente |
+| Skill | When to Use | How to Prompt the Agent |
 | :--- | :--- | :--- |
-| **`code-review-and-quality`** | Antes de abrir ou aprovar qualquer Pull Request. Avalia 5 eixos: correção, legibilidade, arquitetura, segurança e performance. | *"Faz um code review rigoroso das alterações deste PR / diff."* |
-| **`code-simplification`** | Refatoração de código com complexidade acidental, aninhamentos excessivos ou abstrações prematuras. | *"Simplifica este módulo mantendo o comportamento e a cobertura de testes."* |
-| **`security-and-hardening`** | Auditoria e proteção contra vulnerabilidades (injeção, XSS, exposição de segredos, validação de inputs). | *"Audita este código à procura de riscos de segurança e aplica boas práticas."* |
+| **`code-review-and-quality`** | Before opening or approving any Pull Request. Evaluates correctness, readability, architecture, security, and performance. | *"Perform a thorough code review on the changes in this PR / diff."* |
+| **`code-simplification`** | Refactoring code with accidental complexity, deep nesting, or premature abstractions. | *"Simplify this module while preserving behavior and test coverage."* |
+| **`security-and-hardening`** | Auditing against injection, XSS, secret exposure, and input validation vulnerabilities. | *"Audit this code for security vulnerabilities and apply defensive best practices."* |
 
 ---
 
-### 4. Frontend, Performance e UI
+### 4. Frontend, Performance and UI
 
-| Skill | Quando usar | Como pedir ao Agente |
+| Skill | When to Use | How to Prompt the Agent |
 | :--- | :--- | :--- |
-| **`frontend-ui-engineering`** | Construção de componentes modernos, acessibilidade (WCAG), responsividade e estado da UI. | *"Desenvolve o componente seguindo boas práticas de frontend e acessibilidade."* |
-| **`performance-optimization`** | Otimização de bundle, Core Web Vitals, re-renderizações desnecessárias e lazy loading. | *"Analisa a performance e sugere melhorias com base em métricas."* |
-| **`browser-testing-with-devtools`** | Testes no browser usando Chrome DevTools para inspecionar erros de consola, rede e layout. | *"Valida a interface no browser e verifica se há erros na consola ou rede."* |
+| **`frontend-ui-engineering`** | Building accessible (WCAG), responsive UI components with clean state management. | *"Develop this component adhering to modern frontend best practices and accessibility."* |
+| **`performance-optimization`** | Optimizing bundle sizes, Core Web Vitals, re-renderings, and canvas pipeline throughput. | *"Profile performance bottlenecks and optimize render throughput."* |
+| **`browser-testing-with-devtools`** | In-browser testing using Chrome DevTools to inspect console errors, network requests, and layouts. | *"Verify the UI in the browser and check for any console or layout issues."* |
 
 ---
 
-### 5. Git e Gestão de Versões
+### 5. Git and Version Control
 
-| Skill | Quando usar | Como pedir ao Agente |
+| Skill | When to Use | How to Prompt the Agent |
 | :--- | :--- | :--- |
-| **`git-workflow-and-versioning`** | Criação de commits semânticos (*Conventional Commits*), branch naming e mensagens de PR claras. | *"Prepara os commits semânticos para as alterações realizadas."* |
-| **`documentation-and-adrs`** | Registo de decisões arquiteturais importantes (ADRs) e documentação de APIs. | *"Documenta esta decisão de arquitetura num ficheiro ADR."* |
+| **`git-workflow-and-versioning`** | Writing Conventional Commits, clean branch naming, and comprehensive PR summaries. | *"Prepare semantic commits for the completed changes."* |
+| **`documentation-and-adrs`** | Documenting significant architecture decisions (ADRs) and public APIs. | *"Document this architectural decision in an ADR file."* |
 
 ---
 
-## 🔗 Repositórios de Referência
+## 🔗 Reference Repositories
 
-- **[addyosmani/agent-skills](https://github.com/addyosmani/agent-skills)**: Repositório com as skills de SDLC e engenharia de software sênior.
-- **[google/skills](https://github.com/google/skills)**: Skills oficiais da Google para GCP, BigQuery, Cloud Run, Firebase e boas práticas de arquitetura na nuvem.
-- **[VoltAgent/awesome-agent-skills](https://github.com/VoltAgent/awesome-agent-skills)**: Catálogo com mais de 1.000 skills da comunidade organizadas por tecnologia.
-- **[anthropics/skills](https://github.com/anthropics/skills)**: Padrão aberto de especificação de skills.
+- **[addyosmani/agent-skills](https://github.com/addyosmani/agent-skills)**: SDLC and senior software engineering agent skills.
+- **[google/skills](https://github.com/google/skills)**: Official Google skills for cloud architectures, Firebase, and development workflows.
+- **[VoltAgent/awesome-agent-skills](https://github.com/VoltAgent/awesome-agent-skills)**: Curated catalog of community agent skills.
+- **[anthropics/skills](https://github.com/anthropics/skills)**: Open agent skills specification.
 
 ---
 
-## 💡 Dica de Ouro para o Dia a Dia
+## 💡 Pro-Tip for Daily Pair Programming
 
-> Antes de pedir ao assistente para "fazer tudo de uma vez", invoque uma skill de planeamento (`planning-and-task-breakdown` ou `interview-me`). Isso reduz o tempo gasto em correções, diminui bugs e garante código alinhado com as expectativas da equipa.
+> Before prompting your AI assistant to "build the entire feature at once", activate a planning skill (`planning-and-task-breakdown` or `interview-me`). Taking two minutes to align on design decisions and edge cases saves hours of debugging and produces production-grade code.

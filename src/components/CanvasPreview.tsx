@@ -52,26 +52,43 @@ export const CanvasPreview: React.FC<CanvasPreviewProps> = ({
   // Memoized unified timeline to prevent 60 FPS recalculations
   const { unifiedMidi, timing } = useMemo(() => {
     return buildUnifiedTimelineMidi(midiData, introMidiData || null, settings);
-  }, [midiData, introMidiData, settings.enableIntro, settings.introBars, settings.bpm, settings.exportLoops]);
+  }, [
+    midiData,
+    introMidiData,
+    settings.enableIntro,
+    settings.introBars,
+    settings.bpm,
+    settings.loopBars,
+    settings.audioTrimBars,
+    settings.audioTrimStartBar,
+    settings.exportLoops,
+  ]);
 
   // Main 60 FPS Animation loop for real-time preview with seamless unified timeline and intro awareness.
   // Pauses rendering while an export is actively generating frames to free GPU/CPU bandwidth.
+  // Throttles rendering to 60 FPS on high refresh rate displays (120Hz/144Hz) to avoid excessive GPU overhead.
   useEffect(() => {
     let animId: number;
+    let lastFrameTime = 0;
+    const targetInterval = 1000 / 60; // 60 FPS target (~16.67ms)
 
-    const loop = () => {
+    const loop = (now: number) => {
+      animId = requestAnimationFrame(loop);
+
       if (!isExporting && rendererRef.current) {
-        try {
-          const currentTime = audioManager.getCurrentTime();
-          const analysis = audioManager.getRealtimeAnalysis();
-
-          const { timingInfo } = calculateFrameProgress(currentTime, timing, settings, unifiedMidi);
-          rendererRef.current.render(currentTime, unifiedMidi, analysis, settings, timingInfo);
-        } catch (err) {
-          console.error('[SampleScreen] Canvas render loop error:', err);
+        const elapsedSinceLast = now - lastFrameTime;
+        if (elapsedSinceLast >= targetInterval - 1.5) {
+          lastFrameTime = now - (elapsedSinceLast % targetInterval);
+          try {
+            const currentTime = audioManager.getCurrentTime();
+            const analysis = audioManager.getRealtimeAnalysis();
+            const { timingInfo } = calculateFrameProgress(currentTime, timing, settings, unifiedMidi);
+            rendererRef.current.render(currentTime, unifiedMidi, analysis, settings, timingInfo);
+          } catch (err) {
+            console.error('[SampleScreen] Canvas render loop error:', err);
+          }
         }
       }
-      animId = requestAnimationFrame(loop);
     };
 
     animId = requestAnimationFrame(loop);

@@ -254,6 +254,52 @@ export function getTimelineTiming(
   };
 }
 
+/**
+ * Detects whether MIDI notes already start at or near the intro duration offset
+ * (e.g. exported from a DAW arrangement timeline rather than an isolated pattern).
+ */
+export function isMidiTimelineOffset(notes: MidiNote[], introDuration: number): { isOffset: boolean; firstNoteTime: number } {
+  if (!notes || notes.length === 0) {
+    return { isOffset: false, firstNoteTime: 0 };
+  }
+  let firstNoteTime = Infinity;
+  for (let i = 0; i < notes.length; i++) {
+    if (notes[i].time < firstNoteTime) firstNoteTime = notes[i].time;
+  }
+  if (!Number.isFinite(firstNoteTime)) firstNoteTime = 0;
+  const isOffset = Math.abs(firstNoteTime - introDuration) < 0.5;
+  return { isOffset, firstNoteTime };
+}
+
+/**
+ * High-performance binary search for active notes at the given loop time.
+ * Avoids O(N) linear filter on every frame (critical for large MIDI files).
+ */
+export function getActiveNotes(notes: MidiNote[], loopTime: number): MidiNote[] {
+  if (!notes || notes.length === 0) return [];
+
+  let low = 0;
+  let high = notes.length;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    if (notes[mid].time <= loopTime) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+
+  const active: MidiNote[] = [];
+  for (let i = low - 1; i >= 0; i--) {
+    const n = notes[i];
+    if (loopTime - n.time > 16) break;
+    if (loopTime >= n.time && loopTime < n.time + n.duration) {
+      active.push(n);
+    }
+  }
+  return active;
+}
+
 export function buildUnifiedTimelineMidi(
   mainMidi: ParsedMidi,
   introMidi: ParsedMidi | null,
@@ -279,12 +325,7 @@ export function buildUnifiedTimelineMidi(
 
   // Check whether mainMidi notes start at 0 (exported as clip/pattern)
   // or already start at/near introDuration (exported from DAW arrangement timeline)
-  const firstMainTime = mainMidi.notes.length > 0
-    ? Math.min(...mainMidi.notes.map(n => n.time))
-    : 0;
-
-  // If first main note is already placed near introDuration (within 0.5s), it was exported from timeline
-  const isAlreadyTimelineOffset = Math.abs(firstMainTime - introDuration) < 0.5;
+  const { isOffset: isAlreadyTimelineOffset, firstNoteTime: firstMainTime } = isMidiTimelineOffset(mainMidi.notes, introDuration);
 
   const unifiedNotes: MidiNote[] = [];
 

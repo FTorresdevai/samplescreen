@@ -4,11 +4,26 @@
  */
 
 export const MAX_AUDIO_BYTES = 150 * 1024 * 1024; // 150 MB limit
+export const MAX_AUDIO_DURATION_SECONDS = 15 * 60;  // 15 minutes max
 export const MAX_MIDI_BYTES = 5 * 1024 * 1024;     // 5 MB limit
 
 export interface ValidationResult {
   valid: boolean;
   error?: string;
+}
+
+export function validateAudioDuration(durationSeconds: number): ValidationResult {
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+    return { valid: false, error: 'Audio file duration is invalid or empty.' };
+  }
+  if (durationSeconds > MAX_AUDIO_DURATION_SECONDS) {
+    const minutes = Math.floor(durationSeconds / 60);
+    return {
+      valid: false,
+      error: `Audio duration too long (${minutes} min). Maximum limit is 15 minutes to prevent memory overflow.`,
+    };
+  }
+  return { valid: true };
 }
 
 export function validateAudioFile(file: File): ValidationResult {

@@ -14,6 +14,31 @@ export interface ExportProgress {
   status: string;
 }
 
+async function resampleAudioBuffer(
+  sourceBuffer: AudioBuffer,
+  targetSampleRate: number
+): Promise<AudioBuffer> {
+  if (sourceBuffer.sampleRate === targetSampleRate) {
+    return sourceBuffer;
+  }
+  const OfflineCtx =
+    window.OfflineAudioContext ||
+    (window as unknown as { webkitOfflineAudioContext: typeof OfflineAudioContext }).webkitOfflineAudioContext;
+  const numFrames = Math.ceil(sourceBuffer.duration * targetSampleRate);
+  const offlineCtx = new OfflineCtx(
+    sourceBuffer.numberOfChannels,
+    numFrames,
+    targetSampleRate
+  );
+
+  const sourceNode = offlineCtx.createBufferSource();
+  sourceNode.buffer = sourceBuffer;
+  sourceNode.connect(offlineCtx.destination);
+  sourceNode.start(0);
+
+  return await offlineCtx.startRendering();
+}
+
 export class VideoExporter {
   private isCancelled = false;
 
@@ -50,6 +75,9 @@ export class VideoExporter {
     exportCanvas.height = 1920;
     const exportRenderer = new CanvasRenderer(exportCanvas);
 
+    // Reset offline audio analysis state for clean FFT calculations
+    audioManager.resetOfflineAnalysisState();
+
     // Check for WebCodecs support
     const hasWebCodecs = typeof window.VideoEncoder === 'function' && typeof window.VideoFrame === 'function';
 
@@ -73,6 +101,10 @@ export class VideoExporter {
         timing
       );
     } catch (err) {
+      // Never fall back to MediaRecorder if the user intentionally cancelled the export!
+      if (this.isCancelled || (err instanceof Error && err.message.includes('cancelled'))) {
+        throw err;
+      }
       console.warn('WebCodecs failed, falling back to MediaRecorder:', err);
       return this.exportWithMediaRecorder(exportCanvas, exportRenderer, audioManager, unifiedMidi, settings, onProgress, timing, exportAudioBuffer);
     }
@@ -95,15 +127,55 @@ export class VideoExporter {
 
     // Setup Audio Encoder if supported
     let audioEncoder: AudioEncoder | null = null;
+    let videoEncoder: VideoEncoder | null = null;
     let chosenAudioCodec: 'aac' | 'opus' | null = null;
     let webCodecsAudioCodecName = 'mp4a.40.2';
 
-    // Use standard 44.1kHz or 48kHz stereo matching export audio buffer
-    const sampleRate = (audioBuffer && (audioBuffer.sampleRate === 48000 || audioBuffer.sampleRate === 44100))
-      ? audioBuffer.sampleRate
-      : 44100;
+    const nativeSampleRate = audioBuffer?.sampleRate || 44100;
+    let targetAudioSampleRate = nativeSampleRate;
+    let effectiveAudioBuffer = audioBuffer;
     const numberOfChannels = 2; // Always stereo (universal across all players and encoders)
     const audioBitrate = 192_000;
+
+    if (audioBuffer && typeof window.AudioEncoder === 'function') {
+      try {
+        const aacSupport = await AudioEncoder.isConfigSupported({
+          codec: 'mp4a.40.2',
+          numberOfChannels,
+          sampleRate: nativeSampleRate,
+          bitrate: audioBitrate,
+        });
+
+        if (aacSupport.supported) {
+          chosenAudioCodec = 'aac';
+          webCodecsAudioCodecName = 'mp4a.40.2';
+          targetAudioSampleRate = nativeSampleRate;
+        } else {
+          const opusSupport = await AudioEncoder.isConfigSupported({
+            codec: 'opus',
+            numberOfChannels,
+            sampleRate: 48000,
+            bitrate: audioBitrate,
+          });
+          if (opusSupport.supported) {
+            chosenAudioCodec = 'opus';
+            webCodecsAudioCodecName = 'opus';
+            targetAudioSampleRate = 48000;
+          }
+        }
+      } catch (e) {
+        console.warn('AudioEncoder config check failed:', e);
+      }
+    }
+
+    // If Opus was selected and source audio is not 48kHz, resample it to prevent audio playing ~9% too fast!
+    if (chosenAudioCodec === 'opus' && audioBuffer && audioBuffer.sampleRate !== 48000) {
+      try {
+        effectiveAudioBuffer = await resampleAudioBuffer(audioBuffer, 48000);
+      } catch (resampleErr) {
+        console.warn('Failed to resample audio buffer to 48kHz for Opus:', resampleErr);
+      }
+    }
 
     const muxerOptions: ConstructorParameters<typeof Muxer>[0] = {
       target,
@@ -116,43 +188,14 @@ export class VideoExporter {
       firstTimestampBehavior: 'offset',
     };
 
-    if (audioBuffer && typeof window.AudioEncoder === 'function') {
-      try {
-        const aacSupport = await AudioEncoder.isConfigSupported({
-          codec: 'mp4a.40.2',
-          numberOfChannels,
-          sampleRate,
-          bitrate: audioBitrate,
-        });
-
-        if (aacSupport.supported) {
-          chosenAudioCodec = 'aac';
-          webCodecsAudioCodecName = 'mp4a.40.2';
-        } else {
-          const opusSupport = await AudioEncoder.isConfigSupported({
-            codec: 'opus',
-            numberOfChannels,
-            sampleRate: 48000,
-            bitrate: audioBitrate,
-          });
-          if (opusSupport.supported) {
-            chosenAudioCodec = 'opus';
-            webCodecsAudioCodecName = 'opus';
-          }
-        }
-
-        if (chosenAudioCodec) {
-          muxerOptions.audio = {
-            codec: chosenAudioCodec,
-            numberOfChannels,
-            sampleRate: chosenAudioCodec === 'opus' ? 48000 : sampleRate,
-          };
-        } else {
-          console.warn('AudioEncoder does not support AAC or Opus in this browser.');
-        }
-      } catch (e) {
-        console.warn('AudioEncoder config check failed:', e);
-      }
+    if (chosenAudioCodec) {
+      muxerOptions.audio = {
+        codec: chosenAudioCodec,
+        numberOfChannels,
+        sampleRate: targetAudioSampleRate,
+      };
+    } else if (audioBuffer) {
+      console.warn('AudioEncoder does not support AAC or Opus in this browser.');
     }
 
     // If an audio buffer exists but WebCodecs cannot encode audio, fallback to MediaRecorder so video is never silent!
@@ -200,163 +243,177 @@ export class VideoExporter {
       }
     }
 
-    // Initialize VideoEncoder with robust error tracking
+    // Initialize Encoders with robust error tracking and cleanup
     let encoderError: Error | null = null;
-    const videoEncoder = new VideoEncoder({
-      output: (chunk, meta) => {
-        try {
-          muxer.addVideoChunk(chunk, meta);
-        } catch (muxErr) {
-          console.error('Muxer addVideoChunk error:', muxErr);
-          encoderError = muxErr instanceof Error ? muxErr : new Error(String(muxErr));
-        }
-      },
-      error: (e) => {
-        console.error('VideoEncoder error:', e);
-        encoderError = e instanceof Error ? e : new Error(String(e));
-      },
-    });
+    let audioEncoderError: Error | null = null;
 
-    videoEncoder.configure({
-      codec: chosenCodec,
-      width: 1080,
-      height: 1920,
-      bitrate: 10_000_000,
-      framerate: fps,
-      avc: { format: 'avc' },
-    });
+    try {
+      videoEncoder = new VideoEncoder({
+        output: (chunk, meta) => {
+          try {
+            muxer.addVideoChunk(chunk, meta);
+          } catch (muxErr) {
+            console.error('Muxer addVideoChunk error:', muxErr);
+            encoderError = muxErr instanceof Error ? muxErr : new Error(String(muxErr));
+          }
+        },
+        error: (e) => {
+          console.error('VideoEncoder error:', e);
+          encoderError = e instanceof Error ? e : new Error(String(e));
+        },
+      });
 
-    if (chosenAudioCodec && audioBuffer) {
-      try {
+      videoEncoder.configure({
+        codec: chosenCodec,
+        width: 1080,
+        height: 1920,
+        bitrate: 10_000_000,
+        framerate: fps,
+        avc: { format: 'avc' },
+      });
+
+      if (chosenAudioCodec && effectiveAudioBuffer) {
         let audioChunksCount = 0;
         audioEncoder = new AudioEncoder({
           output: (chunk, meta) => {
             audioChunksCount++;
-            muxer.addAudioChunk(chunk, meta);
+            try {
+              muxer.addAudioChunk(chunk, meta);
+            } catch (muxErr) {
+              audioEncoderError = muxErr instanceof Error ? muxErr : new Error(String(muxErr));
+            }
           },
-          error: (e) => console.error('AudioEncoder error:', e),
+          error: (e) => {
+            console.error('AudioEncoder error:', e);
+            audioEncoderError = e instanceof Error ? e : new Error(String(e));
+          },
         });
 
         audioEncoder.configure({
           codec: webCodecsAudioCodecName,
           numberOfChannels,
-          sampleRate,
+          sampleRate: targetAudioSampleRate,
           bitrate: audioBitrate,
         });
 
         // Encode pre-cut audio buffer directly into AAC/Opus chunks matching exact video duration
-        await this.encodeAudioBuffer(audioBuffer, audioEncoder, sampleRate);
+        await this.encodeAudioBuffer(effectiveAudioBuffer, audioEncoder, targetAudioSampleRate);
+        if (audioEncoderError) {
+          throw audioEncoderError;
+        }
         await audioEncoder.flush();
+        if (audioEncoderError) {
+          throw audioEncoderError;
+        }
         try { audioEncoder.close(); } catch {}
         audioEncoder = null; // Cleaned up
         console.log(`Audio encoding complete! Total ${chosenAudioCodec.toUpperCase()} chunks muxed: ${audioChunksCount}`);
-      } catch (audioErr) {
-        console.error('Audio encoding failed:', audioErr);
-      }
-    }
-
-    // Immediately notify UI that video frame encoding has started
-    onProgress({
-      currentFrame: 1,
-      totalFrames,
-      percent: 1,
-      fps: 60,
-      etaSeconds: Math.ceil(duration),
-      status: 'Rendering & Encoding frames at 60 FPS...',
-    });
-
-    // Deterministic Video Frame Loop
-    const startTime = performance.now();
-    const frameDurationMicros = Math.round(1_000_000 / fps);
-
-    // Enforce clean canvas export: Never draw safe-zone guide lines or UI helpers on the final exported video
-    const exportCleanSettings: VisualizerSettings = {
-      ...settings,
-      showSafeZoneGuides: false,
-    };
-
-    for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
-      if (this.isCancelled) {
-        throw new Error('Export cancelled by user');
-      }
-      if (encoderError) {
-        throw encoderError;
       }
 
-      // Safe non-blocking queue throttle: wait for encoder dequeue or small timeout
-      while (videoEncoder.encodeQueueSize > 25) {
-        if (this.isCancelled) throw new Error('Export cancelled by user');
-        if (encoderError) throw encoderError;
-        await Promise.race([
-          new Promise((r) => videoEncoder.addEventListener('dequeue', r, { once: true })),
-          new Promise((r) => setTimeout(r, 8))
-        ]);
-      }
-
-      const currentTime = frameIndex / fps;
-      const analysis = audioManager.getOfflineAnalysis(currentTime, audioBuffer);
-
-      // Render exact deterministic frame with seamless unified timeline and intro awareness
-      const { timingInfo } = calculateFrameProgress(currentTime, timing, exportCleanSettings, unifiedMidi);
-      renderer.render(currentTime, unifiedMidi, analysis, exportCleanSettings, timingInfo);
-
-      // Create video frame directly from canvas
-      const timestampMicros = Math.round(frameIndex * frameDurationMicros);
-      const videoFrame = new VideoFrame(canvas, {
-        timestamp: timestampMicros,
-        duration: frameDurationMicros,
+      // Immediately notify UI that video frame encoding has started
+      onProgress({
+        currentFrame: 1,
+        totalFrames,
+        percent: 1,
+        fps: 60,
+        etaSeconds: Math.ceil(duration),
+        status: 'Rendering & Encoding frames at 60 FPS...',
       });
 
-      // Insert keyframe every 2 seconds (120 frames at 60fps)
-      videoEncoder.encode(videoFrame, { keyFrame: frameIndex % 120 === 0 });
-      videoFrame.close();
+      // Deterministic Video Frame Loop
+      const startTime = performance.now();
+      const frameDurationMicros = Math.round(1_000_000 / fps);
 
-      // Report progress periodically (every 4 frames gives smooth UI and lets GPU encode breathe)
-      if (frameIndex % 4 === 0 || frameIndex === totalFrames - 1) {
-        const elapsedSecs = (performance.now() - startTime) / 1000;
-        const currentSpeed = frameIndex / Math.max(0.01, elapsedSecs);
-        const effectiveFps = frameIndex > 8 ? (Math.round(currentSpeed) || 60) : 60;
-        const remainingFrames = totalFrames - frameIndex;
-        const eta = Math.ceil(remainingFrames / effectiveFps);
+      // Enforce clean canvas export: Never draw safe-zone guide lines or UI helpers on the final exported video
+      const exportCleanSettings: VisualizerSettings = {
+        ...settings,
+        showSafeZoneGuides: false,
+      };
 
-        onProgress({
-          currentFrame: frameIndex + 1,
-          totalFrames,
-          percent: Math.min(99, Math.round(((frameIndex + 1) / totalFrames) * 100)),
-          fps: effectiveFps,
-          etaSeconds: eta,
-          status: 'Rendering & Encoding frames at 60 FPS...',
+      const activeVideoEncoder = videoEncoder;
+
+      for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
+        if (this.isCancelled) {
+          throw new Error('Export cancelled by user');
+        }
+        if (encoderError) {
+          throw encoderError;
+        }
+
+        // Safe non-blocking queue throttle: wait for encoder dequeue or small timeout
+        while (activeVideoEncoder.encodeQueueSize > 25) {
+          if (this.isCancelled) throw new Error('Export cancelled by user');
+          if (encoderError) throw encoderError;
+          await Promise.race([
+            new Promise((r) => activeVideoEncoder.addEventListener('dequeue', r, { once: true })),
+            new Promise((r) => setTimeout(r, 8))
+          ]);
+        }
+
+        const currentTime = frameIndex / fps;
+        const analysis = audioManager.getOfflineAnalysis(currentTime, effectiveAudioBuffer);
+
+        // Render exact deterministic frame with seamless unified timeline and intro awareness
+        const { timingInfo } = calculateFrameProgress(currentTime, timing, exportCleanSettings, unifiedMidi);
+        renderer.render(currentTime, unifiedMidi, analysis, exportCleanSettings, timingInfo);
+
+        // Create video frame directly from canvas
+        const timestampMicros = Math.round(frameIndex * frameDurationMicros);
+        const videoFrame = new VideoFrame(canvas, {
+          timestamp: timestampMicros,
+          duration: frameDurationMicros,
         });
 
-        // Yield to browser UI thread to prevent freezing
-        await new Promise((r) => setTimeout(r, 0));
+        // Insert keyframe every 2 seconds (120 frames at 60fps)
+        activeVideoEncoder.encode(videoFrame, { keyFrame: frameIndex % 120 === 0 });
+        videoFrame.close();
+
+        // Report progress periodically (every 4 frames gives smooth UI and lets GPU encode breathe)
+        if (frameIndex % 4 === 0 || frameIndex === totalFrames - 1) {
+          const elapsedSecs = (performance.now() - startTime) / 1000;
+          const currentSpeed = frameIndex / Math.max(0.01, elapsedSecs);
+          const effectiveFps = frameIndex > 8 ? (Math.round(currentSpeed) || 60) : 60;
+          const remainingFrames = totalFrames - frameIndex;
+          const eta = Math.ceil(remainingFrames / effectiveFps);
+
+          onProgress({
+            currentFrame: frameIndex + 1,
+            totalFrames,
+            percent: Math.min(99, Math.round(((frameIndex + 1) / totalFrames) * 100)),
+            fps: effectiveFps,
+            etaSeconds: eta,
+            status: 'Rendering & Encoding frames at 60 FPS...',
+          });
+
+          // Yield to browser UI thread to prevent freezing
+          await new Promise((r) => setTimeout(r, 0));
+        }
+      }
+
+      onProgress({
+        currentFrame: totalFrames,
+        totalFrames,
+        percent: 99,
+        fps: 60,
+        etaSeconds: 0,
+        status: 'Finalizing MP4 container...',
+      });
+
+      await activeVideoEncoder.flush();
+      if (encoderError) throw encoderError;
+
+      muxer.finalize();
+
+      const buffer = target.buffer;
+      return new Blob([buffer], { type: 'video/mp4' });
+    } finally {
+      if (audioEncoder && audioEncoder.state !== 'closed') {
+        try { audioEncoder.close(); } catch {}
+      }
+      if (videoEncoder && videoEncoder.state !== 'closed') {
+        try { videoEncoder.close(); } catch {}
       }
     }
-
-    onProgress({
-      currentFrame: totalFrames,
-      totalFrames,
-      percent: 99,
-      fps: 60,
-      etaSeconds: 0,
-      status: 'Finalizing MP4 container...',
-    });
-
-    await Promise.race([
-      videoEncoder.flush(),
-      new Promise((resolve) => setTimeout(resolve, 5000))
-    ]);
-    try { videoEncoder.close(); } catch {}
-
-    if (audioEncoder) {
-      await audioEncoder.flush();
-      audioEncoder.close();
-    }
-
-    muxer.finalize();
-
-    const buffer = target.buffer;
-    return new Blob([buffer], { type: 'video/mp4' });
   }
 
   private async encodeAudioBuffer(
@@ -372,6 +429,14 @@ export class VideoExporter {
 
     for (let offset = 0; offset < totalSamples; offset += chunkSize) {
       if (this.isCancelled) return;
+
+      while (encoder.encodeQueueSize > 25) {
+        if (this.isCancelled) return;
+        await Promise.race([
+          new Promise((r) => encoder.addEventListener('dequeue', r, { once: true })),
+          new Promise((r) => setTimeout(r, 8))
+        ]);
+      }
 
       const samplesRemaining = totalSamples - offset;
       const validFrames = Math.min(chunkSize, samplesRemaining);

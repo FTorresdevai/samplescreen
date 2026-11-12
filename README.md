@@ -122,8 +122,8 @@ The Canvas runs at internal native **1080×1920 resolution** (9:16 vertical vide
 ```
 
 > [!CAUTION]
-> **The Golden Rule for Collaborators:**
-> **NEVER** modify coordinates or add conditional branching in `src/engine/renderer.ts`, `src/engine/exporter.ts`, or `src/engine/audio.ts`. All new contributions must live isolated inside their own folder/file and conform to their designated bounding box slot.
+> **The Golden Rule for Visual Model & Hardware Contributors:**
+> **NEVER** hardcode model-specific visual elements or conditional branching inside `src/engine/renderer.ts`, `src/engine/exporter.ts`, or `src/engine/audio.ts`. All visual models and hardware synthesizers must live isolated inside `src/models/` or `src/hardware/`, conform to their designated bounding box slot, and be registered via their respective registry.
 
 ---
 
@@ -230,7 +230,7 @@ export const VISUAL_MODELS_MANIFEST: VisualModelManifest[] = [
   },
 ];
 ```
-🎉 **Done!** The Customization Sidebar and the `#mockups` lab will automatically display your new model with zero changes required to any other files.
+🎉 **Done!** The Customization Sidebar will automatically display your new model with zero changes required to any other files.
 
 ---
 

@@ -5,6 +5,7 @@ import { getModelRenderer } from '../models/registry';
 import { getSynthRenderer } from '../hardware/registry';
 import { drawStudioTapeMachine } from '../hardware/tape-machine';
 import { roundRect } from '../shared/canvas-utils';
+import { getActiveNotes } from './midi';
 
 export class CanvasRenderer {
   private canvas: HTMLCanvasElement;
@@ -24,45 +25,48 @@ export class CanvasRenderer {
     midi: ParsedMidi,
     analysis: AudioAnalysis,
     settings: VisualizerSettings,
-    introInfo?: TimingInfo | { isIntro: boolean; introBar: number; totalIntroBars: number }
+    introInfo?: TimingInfo
   ) {
     const { ctx, canvas } = this;
     const width = canvas.width;   // 1080
     const height = canvas.height; // 1920
 
+    const bpm = settings.bpm || midi.bpm || 80;
+    const secondsPerBar = (60 / bpm) * 4;
     const hasIntro = (introInfo && 'hasIntro' in introInfo)
       ? !!introInfo.hasIntro
       : (introInfo?.isIntro ?? false);
     const isIntro = introInfo?.isIntro ?? false;
-    const bpm = settings.bpm || midi.bpm || 80;
-    const secondsPerBar = (60 / bpm) * 4;
-    const introDuration = (introInfo && 'introDuration' in introInfo && typeof introInfo.introDuration === 'number')
+    const introDuration = (introInfo && typeof introInfo.introDuration === 'number')
       ? introInfo.introDuration
       : (hasIntro ? (introInfo?.totalIntroBars || 1) * secondsPerBar : 0);
-    const mainLoopDuration = (introInfo && 'mainLoopDuration' in introInfo && typeof introInfo.mainLoopDuration === 'number')
+    const mainLoopDuration = (introInfo && typeof introInfo.mainLoopDuration === 'number')
       ? introInfo.mainLoopDuration
       : (midi.duration || 16);
 
+    // Single source of truth from calculateFrameProgress
     let loopTime: number;
-    if (hasIntro) {
-      if (isIntro) {
-        loopTime = currentTime;
-      } else {
-        const timeInMain = Math.max(0, currentTime - introDuration);
-        const mainProgress = timeInMain % mainLoopDuration;
-        loopTime = introDuration + mainProgress;
-      }
+    let duration: number;
+    if (typeof introInfo?.loopTime === 'number' && typeof introInfo?.duration === 'number') {
+      loopTime = introInfo.loopTime;
+      duration = introInfo.duration;
     } else {
-      const loopDuration = midi.duration || 16;
-      loopTime = currentTime % loopDuration;
+      duration = hasIntro ? (introDuration + mainLoopDuration) : (midi.duration || 16);
+      if (hasIntro) {
+        if (isIntro) {
+          loopTime = currentTime;
+        } else {
+          const timeInMain = Math.max(0, currentTime - introDuration);
+          const mainProgress = timeInMain % mainLoopDuration;
+          loopTime = introDuration + mainProgress;
+        }
+      } else {
+        loopTime = currentTime % (midi.duration || 16);
+      }
     }
 
-    const duration = hasIntro ? (introDuration + mainLoopDuration) : (midi.duration || 16);
-
-    // Active MIDI notes at current playback second
-    const activeNotes = (midi.notes || []).filter(
-      n => loopTime >= n.time && loopTime < n.time + n.duration
-    );
+    // High-performance active MIDI notes lookup at current playback second
+    const activeNotes = getActiveNotes(midi.notes || [], loopTime);
 
     // Instagram Reels / TikTok Safe-Zone Scaling
     let xOffset = 0;

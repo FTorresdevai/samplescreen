@@ -114,6 +114,9 @@ export interface TimingInfo {
   totalIntroBars: number;
   introDuration?: number;
   mainLoopDuration?: number;
+  loopTime?: number;
+  loopProgress?: number;
+  duration?: number;
 }
 
 export interface ModelRegion {

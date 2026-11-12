@@ -40,6 +40,9 @@ export function calculateFrameProgress(
         totalIntroBars: introBars,
         introDuration,
         mainLoopDuration,
+        loopTime: currentTime,
+        loopProgress,
+        duration,
       },
     };
   }
@@ -62,6 +65,9 @@ export function calculateFrameProgress(
       totalIntroBars: introBars,
       introDuration,
       mainLoopDuration,
+      loopTime,
+      loopProgress,
+      duration,
     },
   };
 }
