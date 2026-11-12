@@ -48,6 +48,7 @@ export class AudioManager {
   private reusableOfflineFFT: Uint8Array = new Uint8Array(512);
   private offlinePcmWindow = new Float32Array(2048);
   private offlinePrevSmoothed = new Float32Array(1024);
+  private scratchSmoothed = new Float32Array(1024); // smoothing=0 path: never touches export state
 
   constructor() {
     // AudioContext will be initialized on first user interaction
@@ -458,7 +459,9 @@ export class AudioManager {
 
     // When paused or scrubbing: Compute deterministic analysis from buffer at current pause/scrub position!
     if (this.buffer) {
-      return this.getOfflineAnalysis(this.getCurrentTime());
+      // No smoothing while paused/scrubbing: each position is analysed on its own, so
+      // seeking backwards never inherits decayed state (waveform stays visible).
+      return this.getOfflineAnalysis(this.getCurrentTime(), null, 0);
     }
 
     // Default resting values if no audio buffer loaded
@@ -480,7 +483,7 @@ export class AudioManager {
    * Deterministic Offline Analysis at any exact timestamp.
    * Runs the exact same Radix-2 FFT and smoothing as AnalyserNode.
    */
-  public getOfflineAnalysis(time: number, customBuffer?: AudioBuffer | null): AudioAnalysis {
+  public getOfflineAnalysis(time: number, customBuffer?: AudioBuffer | null, smoothing = 0.8): AudioAnalysis {
     const activeBuf = customBuffer || this.buffer;
     if (!activeBuf) {
       return this.getRealtimeAnalysis();
@@ -514,11 +517,16 @@ export class AudioManager {
       }
     }
 
+    let prevSmoothed = this.offlinePrevSmoothed;
+    if (smoothing === 0) {
+      prevSmoothed = this.scratchSmoothed;
+      prevSmoothed.fill(0);
+    }
     const { bass, mid, treble, rms } = analyzeAudioWindow(
       pcmWindow,
-      this.offlinePrevSmoothed,
+      prevSmoothed,
       this.reusableOfflineFFT,
-      0.8
+      smoothing
     );
 
     return {

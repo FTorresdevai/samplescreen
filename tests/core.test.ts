@@ -139,3 +139,21 @@ test('AudioManager: loopEndTime and state isolation', () => {
   mgr.setLoopEndTime(null);
   assert.strictEqual(mgr.getLoopEndTime(), null);
 });
+
+test('Scrubbing: unsmoothed offline analysis is position-only and survives seeking back', async () => {
+  const { AudioManager, createMockAudioBuffer } = await import('../src/engine/audio.ts');
+  const sr = 44100;
+  const buf = createMockAudioBuffer(2, sr * 4, sr);
+  for (let c = 0; c < 2; c++) {
+    const d = buf.getChannelData(c);
+    for (let i = 0; i < d.length; i++) d[i] = 0.8 * Math.sin((2 * Math.PI * 220 * i) / sr);
+  }
+  const am = new AudioManager();
+  const a = Array.from(am.getOfflineAnalysis(1.5, buf, 0).fft);
+  const b = Array.from(am.getOfflineAnalysis(1.5, buf, 0).fft);
+  assert.deepStrictEqual(a, b);
+
+  am.getOfflineAnalysis(2.0, buf, 0);
+  const back = am.getOfflineAnalysis(1.0, buf, 0);
+  assert.ok(back.rms > 0, 'rms after seeking back must be non-zero');
+});
