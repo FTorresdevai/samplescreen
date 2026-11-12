@@ -72,7 +72,7 @@ export function drawTzLadoMauModel(ctx: CanvasRenderingContext2D, context: Model
   const roomImgX = x + 8;
   const roomImgY = y + 8;
 
-  const imgToDraw = getCachedImage('assets/tz_lado_mau_album.jpg');
+  const imgToDraw = getCachedImage('images/tz_lado_mau_album.jpg');
   if (imgToDraw && imgToDraw.complete && imgToDraw.naturalWidth > 0) {
     ctx.save();
     roundRect(ctx, roomImgX, roomImgY, roomImgW, roomImgH, 8, true, false);

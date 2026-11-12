@@ -23,7 +23,7 @@ export function drawStudioTapeMachine(
   colorTheme: 'gold' | 'crimson' | string = 'gold',
   options?: TapeMachineOptions
 ) {
-  const tapeMachineImg = getCachedImage('assets/tape_machine.jpg');
+  const tapeMachineImg = getCachedImage('images/tape_machine.jpg');
 
   ctx.save();
 

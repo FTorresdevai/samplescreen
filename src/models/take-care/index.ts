@@ -75,7 +75,7 @@ export function drawTakeCareModel(ctx: CanvasRenderingContext2D, context: ModelD
   const roomImgX = x + 8;
   const roomImgY = y + 8;
 
-  const takeCareImg = getCachedImage('assets/take_care_album.jpg');
+  const takeCareImg = getCachedImage('images/take_care_album.jpg');
   if (takeCareImg && takeCareImg.complete && takeCareImg.naturalWidth > 0) {
     ctx.save();
     // Clip to upper room rounded zone
@@ -432,7 +432,7 @@ export function drawTakeCareModel(ctx: CanvasRenderingContext2D, context: ModelD
 
     // Piano Fallboard (Polished Walnut with Gilded Brass Nameplate)
     ctx.save();
-    const vintagePianoImg = getCachedImage('assets/vintage_piano.jpg');
+    const vintagePianoImg = getCachedImage('images/vintage_piano.jpg');
     if (vintagePianoImg && vintagePianoImg.complete && vintagePianoImg.naturalWidth > 0) {
       ctx.drawImage(vintagePianoImg, 0, 0, vintagePianoImg.naturalWidth, vintagePianoImg.naturalHeight * 0.25, x + 5, pianoY, w - 10, fallboardH);
       ctx.fillStyle = 'rgba(20, 10, 5, 0.45)';

@@ -24,7 +24,7 @@ export function drawWingUprightSynth(
   analysis: AudioAnalysis,
   settings: VisualizerSettings
 ) {
-  const wingPianoImg = getCachedImage('assets/wing_upright_piano_real.jpg', () => {
+  const wingPianoImg = getCachedImage('images/wing_upright_piano_real.jpg', () => {
     lastCacheKey = '';
   });
 
@@ -176,7 +176,7 @@ function renderStaticWingUprightVST(
   ctx.fillRect(vpX, vpY, vpW, vpH);
 
   // 7. Render Real Wing Upright Piano Photo (Without preset browser!)
-  const wingPianoImg = getCachedImage('assets/wing_upright_piano_real.jpg');
+  const wingPianoImg = getCachedImage('images/wing_upright_piano_real.jpg');
   if (wingPianoImg && wingPianoImg.complete && wingPianoImg.naturalWidth > 0) {
     const origW = wingPianoImg.naturalWidth;   // 584
     const origH = wingPianoImg.naturalHeight;  // 340

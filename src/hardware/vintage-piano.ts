@@ -25,7 +25,7 @@ export function drawVintageWingUprightPiano(
   settings: VisualizerSettings,
   isWaveformMode: boolean
 ) {
-  const takeCareImg = getCachedImage('assets/take_care_album.jpg');
+  const takeCareImg = getCachedImage('images/take_care_album.jpg');
   ctx.save();
 
   // 1. ZONAL ARCHITECTURAL LAYOUT
