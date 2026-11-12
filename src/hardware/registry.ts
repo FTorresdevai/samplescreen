@@ -77,14 +77,19 @@ export const drawDivaSynthAdapter: SynthDrawFn = (ctx, context) => {
 };
 
 export const drawTapeMachineAdapter: SynthDrawFn = (ctx, context) => {
-  const { region, settings, colorTheme } = context;
+  const { region, settings, colorTheme, currentTime, analysis } = context;
   drawStudioTapeMachine(
     ctx,
     region.x,
     region.y,
     region.width,
     region.height,
-    colorTheme ?? (settings.centerVisualizerMode === 'take-care' ? 'gold' : 'crimson')
+    colorTheme ?? (settings.centerVisualizerMode === 'take-care' ? 'gold' : 'crimson'),
+    {
+      currentTime,
+      analysis,
+      bpm: settings.bpm,
+    }
   );
 };
 

@@ -619,28 +619,62 @@ function drawLiquidGoldWaveform(
 
   const centerY = y + h / 2;
 
-  // 1. Dark Smoked Walnut Glass with radial ambient glow
-  const bgGrad = ctx.createRadialGradient(x + w / 2, centerY, 30, x + w / 2, centerY, w * 0.6);
+  // 1. Dark Smoked Walnut Glass & CRT Texture Backdrop
+  const bgGrad = ctx.createRadialGradient(x + w / 2, centerY, 30, x + w / 2, centerY, w * 0.65);
   bgGrad.addColorStop(0, '#1c0f08');
   bgGrad.addColorStop(0.5, '#0e0603');
   bgGrad.addColorStop(1, '#050201');
   ctx.fillStyle = bgGrad;
   ctx.fillRect(x, y, w, h);
 
-  // Subtle acoustic string lines behind the waveform
+  // 2. Technical Engineering Graticule (Subtle Gold 6% grid + 0dB Axis)
   ctx.strokeStyle = 'rgba(212, 175, 55, 0.08)';
   ctx.lineWidth = 1;
-  for (let lx = x + 24; lx < x + w - 24; lx += 32) {
+  const numGridX = 10;
+  const gridStepX = w / numGridX;
+  for (let gx = 1; gx < numGridX; gx++) {
     ctx.beginPath();
-    ctx.moveTo(lx, y);
-    ctx.lineTo(lx, y + h);
+    ctx.moveTo(x + gx * gridStepX, y);
+    ctx.lineTo(x + gx * gridStepX, y + h);
     ctx.stroke();
   }
 
-  // Floating golden embers (strictly clamped inside box)
+  const numGridY = 8;
+  const gridStepY = h / numGridY;
+  for (let gy = 1; gy < numGridY; gy++) {
+    const ly = y + gy * gridStepY;
+    ctx.beginPath();
+    ctx.moveTo(x, ly);
+    ctx.lineTo(x + w, ly);
+    ctx.stroke();
+  }
+
+  // 0dB Center Dashed Axis
+  ctx.strokeStyle = 'rgba(245, 158, 11, 0.25)';
+  ctx.lineWidth = 1.2;
+  ctx.setLineDash([4, 6]);
+  ctx.beginPath();
+  ctx.moveTo(x, centerY);
+  ctx.lineTo(x + w, centerY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Telemetry Labels (JetBrains Mono)
+  ctx.font = '700 8.5px "JetBrains Mono", monospace';
+  ctx.fillStyle = 'rgba(245, 158, 11, 0.55)';
+  ctx.textAlign = 'left';
+  ctx.fillText('+1.0', x + 8, y + 16);
+  ctx.fillText(' 0.0', x + 8, centerY - 4);
+  ctx.fillText('-1.0', x + 8, y + h - 10);
+
+  ctx.textAlign = 'right';
+  ctx.fillText('TEKTRONIX CRT // OVO GOLD PCM // 44.1kHz', x + w - 10, y + 16);
+
+  // 3. Floating Golden Embers (Strictly clamped inside box)
+  const bass = analysis?.bass ?? 0.2;
   for (let i = 0; i < 35; i++) {
     const seed = i * 61.7;
-    const progress = (currentTime * 45 + seed + analysis.bass * 60) % (h + 30);
+    const progress = (currentTime * 45 + seed + bass * 60) % (h + 30);
     const px = Math.max(x + 12, Math.min(x + w - 12, x + 30 + (Math.sin(currentTime * 1.5 + i * 2.1) * 45 + (i * 27) % (w - 60))));
     const py = (y + h + 15) - progress;
     const alpha = Math.max(0, Math.min(0.85, 1 - progress / (h + 30)));
@@ -653,84 +687,93 @@ function drawLiquidGoldWaveform(
   }
   ctx.shadowBlur = 0;
 
-  // Mirrored Liquid Gold Waveform (VisualizerWave style)
-  const numPoints = 128;
-  const waveW = w - 40;
-  const startX = x + 20;
-  const step = waveW / numPoints;
-  const topPoints: { x: number; y: number }[] = [];
-  const botPoints: { x: number; y: number }[] = [];
-
-  const waveData = analysis.waveform;
+  // 4. REAL TIME-DOMAIN OSCILLOSCOPE (Liquid Gold High-Voltage Bipolar Beam)
+  const waveData = analysis?.waveform;
   const waveLen = waveData ? waveData.length : 0;
-  const fftData = analysis.fft;
-  const maxAmp = (h / 2) - 22; // strict headroom
+  const numPoints = 220;
+  const step = (w - 24) / numPoints;
+  const startX = x + 12;
+  const maxAmp = (h / 2) - 20; // Full stage vertical amplitude
+  const sensitivity = (settings.audioSensitivity || 1.0) * 1.75;
+
+  const pointsPrimary: { x: number; y: number }[] = [];
+  const pointsStereo: { x: number; y: number }[] = [];
 
   for (let i = 0; i <= numPoints; i++) {
-    const px = startX + i * step;
     const norm = i / numPoints;
-    // Bell curve envelope so edges cleanly anchor to the frame
-    const env = Math.sin(norm * Math.PI);
+    const px = startX + i * step;
 
-    let rawVal = 0;
+    let sampleVal = 0;
+    let stereoShift = 0;
     if (waveLen > 0) {
-      const sampleIdx = Math.floor(norm * (waveLen - 1));
-      rawVal = Math.abs((waveData[sampleIdx] - 128) / 128);
+      const idx = Math.floor(norm * (waveLen - 1));
+      sampleVal = ((waveData[idx] || 128) - 128) / 128;
+
+      const idx2 = Math.floor(((norm + 0.035) % 1) * (waveLen - 1));
+      stereoShift = ((waveData[idx2] || 128) - 128) / 128;
     }
-    const fftIdx = Math.floor(norm * 48);
-    const fftVal = (fftData && fftData[fftIdx]) ? (fftData[fftIdx] / 255) : 0;
 
-    // Organic multi-harmonic synthesis combined with real audio time-domain
-    const harmonic = Math.sin(norm * 22 + currentTime * 5) * 0.10 * analysis.mid
-                   + Math.cos(norm * 45 - currentTime * 3) * 0.06 * analysis.treble;
-    const bassBloom = Math.exp(-Math.pow((norm - 0.42) * 5, 2)) * analysis.bass * 0.40;
+    const kickDisplacement = Math.sin(norm * 14 + currentTime * 6) * bass * 0.18;
+    const primaryY = centerY - Math.max(-1, Math.min(1, (sampleVal * 1.4 + kickDisplacement) * sensitivity)) * maxAmp;
+    const stereoY = centerY - Math.max(-1, Math.min(1, (stereoShift * 1.35) * sensitivity)) * (maxAmp * 0.88);
 
-    const combinedAmp = Math.max(0.04, rawVal * 0.55 + fftVal * 0.30 + harmonic + bassBloom) * env;
-    // CLAMP FINAL HEIGHT STRICTLY TO maxAmp!
-    const finalH = Math.min(maxAmp, Math.max(5, combinedAmp * maxAmp));
-
-    topPoints.push({ x: px, y: centerY - finalH });
-    botPoints.push({ x: px, y: centerY + finalH });
+    pointsPrimary.push({ x: px, y: primaryY });
+    pointsStereo.push({ x: px, y: stereoY });
   }
 
-  // Draw Liquid Gold Metallic Gradient Body
-  const safeMaxAmp = Number.isFinite(maxAmp) ? Math.max(1, maxAmp) : 50;
-  const safeCenterY = Number.isFinite(centerY) ? centerY : y + h / 2;
-  const goldFillGrad = ctx.createLinearGradient(0, safeCenterY - safeMaxAmp, 0, safeCenterY + safeMaxAmp);
-  goldFillGrad.addColorStop(0, 'rgba(254, 240, 138, 0.95)');
-  goldFillGrad.addColorStop(0.25, 'rgba(245, 158, 11, 0.75)');
-  goldFillGrad.addColorStop(0.5, 'rgba(180, 83, 9, 0.3)');
-  goldFillGrad.addColorStop(0.75, 'rgba(245, 158, 11, 0.75)');
-  goldFillGrad.addColorStop(1, 'rgba(254, 240, 138, 0.95)');
-
+  // Pass 1: Gold Phosphor Ghost Trail (Persistence Decay)
+  ctx.strokeStyle = 'rgba(245, 158, 11, 0.22)';
+  ctx.lineWidth = 4.0;
   ctx.beginPath();
-  ctx.moveTo(topPoints[0].x, topPoints[0].y);
-  for (let i = 1; i < topPoints.length; i++) ctx.lineTo(topPoints[i].x, topPoints[i].y);
-  for (let i = botPoints.length - 1; i >= 0; i--) ctx.lineTo(botPoints[i].x, botPoints[i].y);
-  ctx.closePath();
-  ctx.fillStyle = goldFillGrad;
+  ctx.moveTo(pointsPrimary[0].x, pointsPrimary[0].y + 1);
+  for (let i = 1; i < pointsPrimary.length; i++) ctx.lineTo(pointsPrimary[i].x, pointsPrimary[i].y + 1);
+  ctx.stroke();
+
+  // Pass 2: Secondary Stereo Trace (Pale Gold)
+  ctx.strokeStyle = 'rgba(254, 240, 138, 0.45)';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(pointsStereo[0].x, pointsStereo[0].y);
+  for (let i = 1; i < pointsStereo.length; i++) ctx.lineTo(pointsStereo[i].x, pointsStereo[i].y);
+  ctx.stroke();
+
+  // Pass 3: Primary White-Hot Oscilloscope Beam with Liquid Gold Glow
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 2.2;
   ctx.shadowColor = '#f59e0b';
-  ctx.shadowBlur = 18 * (settings.glowIntensity || 1.1);
-  ctx.fill();
-  ctx.shadowBlur = 0;
-
-  // Draw Sharp Glowing Crest Lines
-  ctx.strokeStyle = '#fffbeb';
-  ctx.lineWidth = 2.0;
-  ctx.shadowColor = '#fde047';
-  ctx.shadowBlur = 10;
+  ctx.shadowBlur = 14 * (settings.glowIntensity || 1.1);
 
   ctx.beginPath();
-  ctx.moveTo(topPoints[0].x, topPoints[0].y);
-  for (let i = 1; i < topPoints.length; i++) ctx.lineTo(topPoints[i].x, topPoints[i].y);
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(botPoints[0].x, botPoints[0].y);
-  for (let i = 1; i < botPoints.length; i++) ctx.lineTo(botPoints[i].x, botPoints[i].y);
+  ctx.moveTo(pointsPrimary[0].x, pointsPrimary[0].y);
+  for (let i = 1; i < pointsPrimary.length; i++) ctx.lineTo(pointsPrimary[i].x, pointsPrimary[i].y);
   ctx.stroke();
   ctx.shadowBlur = 0;
 
-  ctx.restore(); // remove clip
-  ctx.shadowBlur = 0;
+  // 5. Transient Golden Laser Shockwave (@projetociberdelia) on Heavy Kicks
+  if (bass > 0.65) {
+    const flareAlpha = Math.min(0.65, (bass - 0.55) * 2.0);
+    ctx.strokeStyle = `rgba(255, 250, 230, ${flareAlpha})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x + 20, centerY);
+    ctx.lineTo(x + w - 20, centerY);
+    ctx.stroke();
+
+    ctx.strokeStyle = `rgba(245, 158, 11, ${flareAlpha * 0.7})`;
+    ctx.lineWidth = 3.0;
+    ctx.beginPath();
+    ctx.moveTo(x + 50, centerY);
+    ctx.lineTo(x + w - 50, centerY);
+    ctx.stroke();
+  }
+
+  // 6. Bottom Status Readout (Audio Telemetry)
+  ctx.font = '600 8px "JetBrains Mono", monospace';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+  ctx.textAlign = 'left';
+  ctx.fillText(`RMS: ${((analysis.rms || 0) * 100).toFixed(0)}%`, x + 16, y + h - 8);
+  ctx.textAlign = 'right';
+  ctx.fillText(`808 PEAK: ${(bass * 100).toFixed(0)}%`, x + w - 16, y + h - 8);
+
+  ctx.restore();
 }
