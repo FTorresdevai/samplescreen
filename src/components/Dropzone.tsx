@@ -8,6 +8,7 @@ interface DropzoneProps {
   audioFileName: string | null;
   midiFileName: string | null;
   midiData: ParsedMidi | null;
+  detectedAudioInfo?: string | null;
 }
 
 export const Dropzone: React.FC<DropzoneProps> = ({
@@ -16,6 +17,7 @@ export const Dropzone: React.FC<DropzoneProps> = ({
   audioFileName,
   midiFileName,
   midiData,
+  detectedAudioInfo,
 }) => {
   const audioInputRef = useRef<HTMLInputElement>(null);
   const midiInputRef = useRef<HTMLInputElement>(null);
@@ -63,9 +65,17 @@ export const Dropzone: React.FC<DropzoneProps> = ({
             </span>
             {audioFileName && <CheckCircle2 className="w-3 h-3 text-amber-400 flex-shrink-0" />}
           </div>
-          <p className="text-[10px] font-mono text-zinc-500 truncate">
-            {audioFileName ? 'Audio buffer ready' : 'Master audio file'}
-          </p>
+          {detectedAudioInfo ? (
+            <div className="flex items-center gap-1 mt-0.5">
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[9.5px] font-mono font-semibold tracking-wide truncate max-w-full">
+                {detectedAudioInfo}
+              </span>
+            </div>
+          ) : (
+            <p className="text-[10px] font-mono text-zinc-500 truncate">
+              {audioFileName ? 'Audio buffer ready' : 'Master audio file'}
+            </p>
+          )}
         </div>
       </div>
 

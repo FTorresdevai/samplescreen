@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "test": "esbuild tests/core.test.ts --bundle --platform=node --packages=external --outfile=.test-dist/core.test.cjs && node --test .test-dist/core.test.cjs",
+    "test": "esbuild tests/core.test.ts tests/sample-parser.test.ts --bundle --platform=node --packages=external --outdir=.test-dist --out-extension:.js=.cjs && node --test .test-dist/*.cjs",
     "preview": "vite preview"
   },
   "dependencies": {

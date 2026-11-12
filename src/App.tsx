@@ -11,6 +11,7 @@ import { parseMidiFile, createDemoMidi, createDemoIntroMidi, getTimelineTiming }
 import { VideoExporter, ExportProgress } from './engine/exporter';
 import { ParsedMidi, VisualizerSettings } from './types';
 import { validateAudioFile, validateMidiFile, sanitizeText } from './core/validator';
+import { parseSampleFileName } from './core/sample-parser';
 import { MODEL_REGISTRY } from './models/registry';
 
 export const App: React.FC = () => {
@@ -81,6 +82,7 @@ export const App: React.FC = () => {
   const [introMidiFileName, setIntroMidiFileName] = useState<string | null>('demo_intro_pads.mid');
   const [audioFileName, setAudioFileName] = useState<string | null>('demo_synth_chords.wav');
   const [audioDuration, setAudioDuration] = useState<number>(0);
+  const [detectedAudioInfo, setDetectedAudioInfo] = useState<string | null>(null);
   const [midiFileName, setMidiFileName] = useState<string | null>('demo_progression.mid');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true); // Open by default!
 
@@ -167,6 +169,7 @@ export const App: React.FC = () => {
     setAudioFileName('demo_synth_chords.wav');
     setMidiFileName('demo_progression.mid');
     setIntroMidiFileName('demo_intro_pads.mid');
+    setDetectedAudioInfo(null);
     setSettings((prev) => ({
       ...prev,
       title: 'FEELS THE SAME',
@@ -209,8 +212,12 @@ export const App: React.FC = () => {
       setAudioFileName(file.name);
       setAudioDuration(decoded.duration);
 
-      const bpm = settings.bpm || 80;
-      const secondsPerBar = (60 / bpm) * 4;
+      // Auto-detect Title, BPM, Key, and Producer from sample filename
+      const parsed = parseSampleFileName(file.name);
+      setDetectedAudioInfo(parsed.detectedSummary || null);
+
+      const effectiveBpm = parsed.bpm ?? settings.bpm ?? 80;
+      const secondsPerBar = (60 / effectiveBpm) * 4;
       const totalBars = Math.max(1, Math.round(decoded.duration / secondsPerBar));
       const defaultBars = Math.min(16, totalBars);
 
@@ -223,8 +230,8 @@ export const App: React.FC = () => {
         activeMidi = {
           notes: [],
           totalBars: defaultBars,
-          bpm,
-          key: settings.key,
+          bpm: effectiveBpm,
+          key: parsed.key || settings.key,
           duration: decoded.duration,
         };
         activeIntro = null;
@@ -236,6 +243,10 @@ export const App: React.FC = () => {
 
       setSettings((prev) => ({
         ...prev,
+        title: parsed.title ? sanitizeText(parsed.title, 64) : prev.title,
+        bpm: parsed.bpm ?? prev.bpm,
+        key: parsed.key ? sanitizeText(parsed.key, 16) : prev.key,
+        producerHandle: parsed.producer ? sanitizeText(parsed.producer, 48) : prev.producerHandle,
         audioTrimStartBar: 1,
         audioTrimBars: defaultBars,
         loopBars: defaultBars,
@@ -243,7 +254,11 @@ export const App: React.FC = () => {
         waveformMode: !isCustomMidi ? true : prev.waveformMode,
       }));
 
-      const timing = getTimelineTiming(activeMidi, activeIntro, { ...settings, loopBars: defaultBars });
+      const timing = getTimelineTiming(activeMidi, activeIntro, {
+        ...settings,
+        bpm: effectiveBpm,
+        loopBars: defaultBars,
+      });
       audioManager.setLoopEndTime(timing.totalDuration);
     } catch (err) {
       console.error('Failed to decode audio file:', err);
@@ -455,6 +470,7 @@ export const App: React.FC = () => {
               audioFileName={audioFileName}
               midiFileName={midiFileName}
               midiData={midiData}
+              detectedAudioInfo={detectedAudioInfo}
             />
           </div>
 
