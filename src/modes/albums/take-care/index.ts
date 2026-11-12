@@ -3,6 +3,10 @@ import { formatNoteName, detectChord } from '../../../engine/chords';
 import { hexToRgbaStr } from '../../../engine/palettes';
 import { roundRect } from '../../../shared/canvas-utils';
 import { getCachedImage } from '../../../shared/assets';
+import { computeAlbumLayout } from '../_shell/layout';
+import { computeKeyboardGeometry } from '../_shell/keyboard';
+import coverUrl from './assets/cover.jpg';
+import pianoUrl from './assets/piano.jpg';
 
 /**
  * Mode: "Take Care" • OVO Baroque Salon & Vintage Grand Piano Lounge
@@ -21,15 +25,8 @@ export function drawTakeCareModel(ctx: CanvasRenderingContext2D, context: ModelD
 
   ctx.save();
 
-  // 1. ZONAL ARCHITECTURE
-  const isWaveform = context.albumView === 'waveform';
-  const roomH = Math.round(h * 0.42);                  // Upper Baroque Chamber & Table (~280px)
-  const rollAreaH = h - roomH;                         // Lower Suite (~390px)
-  // In Waveform Mode, the piano keyboard is removed so the waveform gets the full stage!
-  const keyboardH = isWaveform ? 0 : Math.round(Math.min(105, rollAreaH * 0.32)); 
-  const waterfallH = rollAreaH - keyboardH - 8;
-  const waterfallY = y + roomH;
-  const pianoY = waterfallY + waterfallH;
+  // 1. ZONAL ARCHITECTURE (shared album layout)
+  const { isWaveform, roomH, keyboardH, waterfallH, waterfallY, pianoY } = computeAlbumLayout(region, context.albumView);
 
   // 2. ROOM BACKGROUND: Deep Mahogany Salon with Vignette
   const bgGrad = ctx.createLinearGradient(x, y, x, y + h);
@@ -75,7 +72,7 @@ export function drawTakeCareModel(ctx: CanvasRenderingContext2D, context: ModelD
   const roomImgX = x + 8;
   const roomImgY = y + 8;
 
-  const takeCareImg = getCachedImage('images/take_care_album.jpg');
+  const takeCareImg = getCachedImage(coverUrl);
   if (takeCareImg && takeCareImg.complete && takeCareImg.naturalWidth > 0) {
     ctx.save();
     // Clip to upper room rounded zone
@@ -186,44 +183,9 @@ export function drawTakeCareModel(ctx: CanvasRenderingContext2D, context: ModelD
     ctx.fillRect(roomImgX, roomImgY, roomImgW, roomImgH);
   }
 
-  // 4. KEYBOARD & WATERFALL GEOMETRY MAPPING
-  // Establish dynamic pitch range matching MIDI notes with 3.5 octave balanced layout
+  // 4. KEYBOARD & WATERFALL GEOMETRY (shared, fitted to the MIDI range)
   const allNotes = midi.notes || [];
-  let minPitch = 36;
-  let maxPitch = 84;
-  if (allNotes.length > 0) {
-    minPitch = Math.min(...allNotes.map(n => n.midi));
-    maxPitch = Math.max(...allNotes.map(n => n.midi));
-  }
-  const lowestOctave = Math.max(1, Math.min(3, Math.floor(minPitch / 12)));
-  const highestOctave = Math.min(7, Math.max(lowestOctave + 3, Math.ceil(maxPitch / 12)));
-  const startKey = lowestOctave * 12; // e.g. 36 (C2)
-  const endKey = Math.min(108, highestOctave * 12 + 11); // e.g. 83 (B5)
-
-  const isWhiteKey = (p: number) => [0, 2, 4, 5, 7, 9, 11].includes(((p % 12) + 12) % 12);
-  const whiteKeys: number[] = [];
-  const blackKeys: number[] = [];
-  for (let p = startKey; p <= endKey; p++) {
-    if (isWhiteKey(p)) whiteKeys.push(p);
-    else blackKeys.push(p);
-  }
-  const numWhite = Math.max(14, whiteKeys.length);
-  const kbdX = x + 18;
-  const kbdW = w - 36;
-  const whiteW = kbdW / numWhite;
-
-  const getKeyX = (pitch: number) => {
-    if (isWhiteKey(pitch)) {
-      const idx = whiteKeys.indexOf(pitch);
-      return kbdX + idx * whiteW + whiteW / 2;
-    } else {
-      const prevWIdx = whiteKeys.indexOf(pitch - 1);
-      if (prevWIdx !== -1) {
-        return kbdX + (prevWIdx + 1) * whiteW;
-      }
-      return kbdX + whiteW / 2;
-    }
-  };
+  const { whiteKeys, blackKeys, isWhiteKey, kbdX, kbdW, whiteW, getKeyX } = computeKeyboardGeometry(midi, region);
 
   // 5. CENTRAL STAGE: VISUALIZERWAVE LIQUID GOLD WAVEFORM vs PIANO WATERFALL
   if (isWaveform) {
@@ -432,7 +394,7 @@ export function drawTakeCareModel(ctx: CanvasRenderingContext2D, context: ModelD
 
     // Piano Fallboard (Polished Walnut with Gilded Brass Nameplate)
     ctx.save();
-    const vintagePianoImg = getCachedImage('images/vintage_piano.jpg');
+    const vintagePianoImg = getCachedImage(pianoUrl);
     if (vintagePianoImg && vintagePianoImg.complete && vintagePianoImg.naturalWidth > 0) {
       ctx.drawImage(vintagePianoImg, 0, 0, vintagePianoImg.naturalWidth, vintagePianoImg.naturalHeight * 0.25, x + 5, pianoY, w - 10, fallboardH);
       ctx.fillStyle = 'rgba(20, 10, 5, 0.45)';

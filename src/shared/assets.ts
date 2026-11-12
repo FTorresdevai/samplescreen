@@ -4,6 +4,8 @@
  */
 
 export function getAssetUrl(relativePath: string): string {
+  // Vite-imported asset URLs (e.g. `import cover from './assets/cover.jpg'`) are already resolved
+  if (/^(\/|[a-z]+:)/i.test(relativePath)) return relativePath;
   const base = ((import.meta as any).env?.BASE_URL || '/').replace(/\/+$/, '');
   const cleanPath = relativePath.replace(/^\/+/, '');
   return `${base}/${cleanPath}`;

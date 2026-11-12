@@ -3,6 +3,9 @@ import { formatNoteName, detectChord } from '../../../engine/chords';
 import { hexToRgbaStr } from '../../../engine/palettes';
 import { roundRect } from '../../../shared/canvas-utils';
 import { getCachedImage } from '../../../shared/assets';
+import { computeAlbumLayout } from '../_shell/layout';
+import { computeKeyboardGeometry } from '../_shell/keyboard';
+import coverUrl from './assets/cover.jpg';
 
 /**
  * Mode: Tz da Coronel "Lado Mau" • Inferno Trap Piano Suite
@@ -18,15 +21,8 @@ export function drawTzLadoMauModel(ctx: CanvasRenderingContext2D, context: Model
 
   ctx.save();
 
-  // 1. ZONAL ARCHITECTURE
-  const isWaveform = context.albumView === 'waveform';
-  const roomH = Math.round(h * 0.42);
-  const rollAreaH = h - roomH;
-  // In Waveform Mode, the piano keyboard is removed so the seismic waveform gets the full stage!
-  const keyboardH = isWaveform ? 0 : Math.round(Math.min(105, rollAreaH * 0.32));
-  const waterfallH = rollAreaH - keyboardH - 8;
-  const waterfallY = y + roomH;
-  const pianoY = waterfallY + waterfallH;
+  // 1. ZONAL ARCHITECTURE (shared album layout)
+  const { isWaveform, roomH, keyboardH, waterfallH, waterfallY, pianoY } = computeAlbumLayout(region, context.albumView);
 
   // 2. ROOM BACKGROUND: Deep Volcanic Charcoal & Pitch Black
   const bgGrad = ctx.createLinearGradient(x, y, x, y + h);
@@ -72,7 +68,7 @@ export function drawTzLadoMauModel(ctx: CanvasRenderingContext2D, context: Model
   const roomImgX = x + 8;
   const roomImgY = y + 8;
 
-  const imgToDraw = getCachedImage('images/tz_lado_mau_album.jpg');
+  const imgToDraw = getCachedImage(coverUrl);
   if (imgToDraw && imgToDraw.complete && imgToDraw.naturalWidth > 0) {
     ctx.save();
     roundRect(ctx, roomImgX, roomImgY, roomImgW, roomImgH, 8, true, false);
@@ -161,43 +157,9 @@ export function drawTzLadoMauModel(ctx: CanvasRenderingContext2D, context: Model
     ctx.fillRect(roomImgX, roomImgY, roomImgW, roomImgH);
   }
 
-  // 4. KEYBOARD & WATERFALL GEOMETRY
+  // 4. KEYBOARD & WATERFALL GEOMETRY (shared, fitted to the MIDI range)
   const allNotes = midi.notes || [];
-  let minPitch = 36;
-  let maxPitch = 84;
-  if (allNotes.length > 0) {
-    minPitch = Math.min(...allNotes.map(n => n.midi));
-    maxPitch = Math.max(...allNotes.map(n => n.midi));
-  }
-  const lowestOctave = Math.max(1, Math.min(3, Math.floor(minPitch / 12)));
-  const highestOctave = Math.min(7, Math.max(lowestOctave + 3, Math.ceil(maxPitch / 12)));
-  const startKey = lowestOctave * 12;
-  const endKey = Math.min(108, highestOctave * 12 + 11);
-
-  const isWhiteKey = (p: number) => [0, 2, 4, 5, 7, 9, 11].includes(((p % 12) + 12) % 12);
-  const whiteKeys: number[] = [];
-  const blackKeys: number[] = [];
-  for (let p = startKey; p <= endKey; p++) {
-    if (isWhiteKey(p)) whiteKeys.push(p);
-    else blackKeys.push(p);
-  }
-  const numWhite = Math.max(14, whiteKeys.length);
-  const kbdX = x + 18;
-  const kbdW = w - 36;
-  const whiteW = kbdW / numWhite;
-
-  const getKeyX = (pitch: number) => {
-    if (isWhiteKey(pitch)) {
-      const idx = whiteKeys.indexOf(pitch);
-      return kbdX + idx * whiteW + whiteW / 2;
-    } else {
-      const prevWIdx = whiteKeys.indexOf(pitch - 1);
-      if (prevWIdx !== -1) {
-        return kbdX + (prevWIdx + 1) * whiteW;
-      }
-      return kbdX + whiteW / 2;
-    }
-  };
+  const { whiteKeys, blackKeys, isWhiteKey, kbdX, kbdW, whiteW, getKeyX } = computeKeyboardGeometry(midi, region);
 
   // 5. CENTRAL STAGE: VISUALIZERWAVE SEISMIC MAGMA PLASMA vs INFERNO WATERFALL
   if (isWaveform) {
