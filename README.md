@@ -316,7 +316,7 @@ To maintain a clean codebase where multiple contributors and agents work concurr
    - **Never import internal helper functions directly from another model's directory or another synth's file.**
 
 2. **Asset Caching Rule (60 FPS Performance)**:
-   - Place all images (`.jpg`, `.png`, `.webp`) in `public/images/` (runtime images loaded by the app). Reference images and mockups go in `docs/images/` and `docs/mockups/`.
+   - Place all images (`.jpg`, `.png`, `.webp`) in `public/images/` (runtime images loaded by the app).
    - Always load images **outside the canvas render loop** (memoized / lazy-loaded once).
    - Never call `new Image()` inside a function called on every animation frame, as this will trigger severe garbage-collection stuttering.
 
