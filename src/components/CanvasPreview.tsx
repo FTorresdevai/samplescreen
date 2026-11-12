@@ -61,6 +61,7 @@ export const CanvasPreview: React.FC<CanvasPreviewProps> = ({
     settings.loopBars,
     settings.audioTrimBars,
     settings.audioTrimStartBar,
+    settings.isAudioTrimmed,
     settings.exportLoops,
   ]);
 

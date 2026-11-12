@@ -7,7 +7,7 @@ import { CustomizationSidebar } from './components/CustomizationSidebar';
 import { ExportModal } from './components/ExportModal';
 import { CanvasRenderer } from './engine/renderer';
 import { audioManager } from './engine/audio';
-import { parseMidiFile, createDemoMidi, createDemoIntroMidi, getTimelineTiming } from './engine/midi';
+import { parseMidiFile, createDemoMidi, createDemoIntroMidi, getTimelineTiming, sliceMidiData } from './engine/midi';
 import { VideoExporter, ExportProgress } from './engine/exporter';
 import { ParsedMidi, VisualizerSettings } from './types';
 import { validateAudioFile, validateMidiFile, sanitizeText } from './core/validator';
@@ -18,6 +18,7 @@ export const App: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rendererRef = useRef<CanvasRenderer | null>(null);
   const exporterRef = useRef<VideoExporter>(new VideoExporter());
+  const originalMidiDataRef = useRef<ParsedMidi | null>(null);
 
   // URL params initialization for deep-linking and visual testing
   const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
@@ -101,19 +102,24 @@ export const App: React.FC = () => {
   useEffect(() => {
     const demo = createDemoMidi(16);
     setMidiData(demo);
+    originalMidiDataRef.current = demo;
     const demoIntro = createDemoIntroMidi(settings.introBars, settings.bpm);
     setIntroMidiData(demoIntro);
-    audioManager.generateCombinedAudioBuffer(
+    const buf = audioManager.generateCombinedAudioBuffer(
       settings.enableIntro ? demoIntro : null,
       demo,
       settings.enableIntro,
       settings.introBars
     );
+    if (buf) {
+      setAudioDuration(buf.duration);
+    }
   }, []);
 
   // Debounced audio regeneration for demo synthesizer (prevents UI freeze on rapid BPM input typing)
   useEffect(() => {
     if (audioSource !== 'demo') return;
+    if (settings.isAudioTrimmed) return; // Do not overwrite active trimmed audio buffer with full progression
     const timer = setTimeout(() => {
       audioManager.generateCombinedAudioBuffer(
         settings.enableIntro ? introMidiData : null,
@@ -123,7 +129,7 @@ export const App: React.FC = () => {
       );
     }, 150);
     return () => clearTimeout(timer);
-  }, [audioSource, settings.enableIntro, settings.introBars, settings.bpm, settings.loopBars, midiData, introMidiData]);
+  }, [audioSource, settings.enableIntro, settings.introBars, settings.bpm, settings.loopBars, settings.isAudioTrimmed, midiData, introMidiData]);
 
   const handleUpdateSettings = (updates: Partial<VisualizerSettings>) => {
     // Sanitize string inputs against XSS and excessive length
@@ -159,6 +165,7 @@ export const App: React.FC = () => {
     audioManager.clearCustomAudio();
     const demo = createDemoMidi();
     setMidiData(demo);
+    originalMidiDataRef.current = demo;
     const demoIntro = createDemoIntroMidi(settings.introBars, 80);
     setIntroMidiData(demoIntro);
     setAudioSource('demo');
@@ -178,12 +185,15 @@ export const App: React.FC = () => {
       audioTrimBars: 8,
       loopBars: 8,
     }));
-    audioManager.generateCombinedAudioBuffer(
+    const buf = audioManager.generateCombinedAudioBuffer(
       settings.enableIntro ? demoIntro : null,
       demo,
       settings.enableIntro,
       settings.introBars
     );
+    if (buf) {
+      setAudioDuration(buf.duration);
+    }
   };
 
   const handleLoadDemoIntro = () => {
@@ -229,9 +239,14 @@ export const App: React.FC = () => {
         };
         activeIntro = null;
         setMidiData(activeMidi);
+        originalMidiDataRef.current = activeMidi;
         setMidiFileName(null);
         setIntroMidiData(null);
         setIntroMidiFileName(null);
+      } else {
+        if (!originalMidiDataRef.current) {
+          originalMidiDataRef.current = activeMidi;
+        }
       }
 
       setSettings((prev) => ({
@@ -252,6 +267,12 @@ export const App: React.FC = () => {
   };
 
   const handleTrimAudio = (startBar: number, numBars: number) => {
+    // Preserve untrimmed original MIDI before applying trim
+    if (!originalMidiDataRef.current) {
+      originalMidiDataRef.current = midiData;
+    }
+    const baseMidi = originalMidiDataRef.current;
+
     const result = audioManager.trimToBars(startBar, numBars, settings.bpm);
     if (result) {
       setAudioDuration(result.durationSec);
@@ -263,6 +284,10 @@ export const App: React.FC = () => {
         isAudioTrimmed: true,
       }));
       audioManager.setLoopEndTime(result.durationSec);
+
+      // Crucial Bug Fix: slice loaded MIDI notes and synchronize with trimmed audio
+      const slicedMidi = sliceMidiData(baseMidi, result.startSec, result.durationSec, result.totalBars);
+      setMidiData(slicedMidi);
     }
   };
 
@@ -273,11 +298,19 @@ export const App: React.FC = () => {
     const secondsPerBar = (60 / bpm) * 4;
     const recoveredBars = Math.max(1, Math.round(originalDur / secondsPerBar));
     const defaultBars = Math.min(16, recoveredBars);
+
+    // Restore original untrimmed MIDI notes
+    if (originalMidiDataRef.current) {
+      setMidiData(originalMidiDataRef.current);
+    }
+
+    const restoredBars = originalMidiDataRef.current?.totalBars || defaultBars;
+
     setSettings((prev) => ({
       ...prev,
       audioTrimStartBar: 1,
       audioTrimBars: defaultBars,
-      loopBars: defaultBars,
+      loopBars: restoredBars,
       isAudioTrimmed: false,
     }));
     audioManager.setLoopEndTime(originalDur);
@@ -293,6 +326,7 @@ export const App: React.FC = () => {
     try {
       const parsed = await parseMidiFile(file);
       setMidiData(parsed);
+      originalMidiDataRef.current = parsed;
       setMidiSource('file');
       setMidiFileName(file.name);
       setSettings((prev) => ({
@@ -300,6 +334,7 @@ export const App: React.FC = () => {
         bpm: parsed.bpm,
         key: parsed.key || prev.key,
         loopBars: parsed.totalBars,
+        isAudioTrimmed: false,
         waveformMode: false, // Activating MIDI file defaults to piano / sequencer mode
       }));
       if (audioSource === 'demo') {
@@ -419,13 +454,14 @@ export const App: React.FC = () => {
 
   // Total playback duration calculation for the timeline scrubber and audio sync
   const timelineTiming = getTimelineTiming(midiData, introMidiData, settings);
-  const totalPlaybackDuration = timelineTiming.totalDuration;
+  const trimmedDuration = audioManager.getDuration() || (settings.audioTrimBars ? settings.audioTrimBars * ((60 / settings.bpm) * 4) : timelineTiming.mainLoopDuration);
+  const totalPlaybackDuration = settings.isAudioTrimmed ? trimmedDuration : timelineTiming.totalDuration;
 
   useEffect(() => {
     if (totalPlaybackDuration > 0) {
       audioManager.setLoopEndTime(totalPlaybackDuration);
     }
-  }, [totalPlaybackDuration]);
+  }, [totalPlaybackDuration, settings.isAudioTrimmed]);
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#060709]">

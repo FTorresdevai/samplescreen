@@ -3,6 +3,26 @@ import { TimelineTiming, isMidiTimelineOffset } from './midi';
 import { analyzeAudioWindow } from '../shared/fft';
 import { MAX_AUDIO_DURATION_SECONDS } from '../core/validator';
 
+export function createMockAudioBuffer(
+  numberOfChannels: number,
+  length: number,
+  sampleRate: number
+): AudioBuffer {
+  const channels: Float32Array[] = [];
+  for (let c = 0; c < numberOfChannels; c++) {
+    channels.push(new Float32Array(length));
+  }
+  return {
+    numberOfChannels,
+    length,
+    sampleRate,
+    duration: length / sampleRate,
+    getChannelData: (ch: number) => channels[ch] || channels[0],
+    copyFromChannel: () => {},
+    copyToChannel: () => {},
+  } as unknown as AudioBuffer;
+}
+
 export class AudioManager {
   private ctx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
@@ -34,8 +54,10 @@ export class AudioManager {
   }
 
   public init() {
+    if (typeof window === 'undefined') return;
     if (!this.ctx) {
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
       this.ctx = new AudioCtx({ latencyHint: 'interactive' });
       this.analyser = this.ctx.createAnalyser();
       this.analyser.fftSize = 2048;
@@ -49,6 +71,13 @@ export class AudioManager {
       this.fftData = new Uint8Array(new ArrayBuffer(this.analyser.frequencyBinCount));
       this.waveformData = new Uint8Array(new ArrayBuffer(this.analyser.frequencyBinCount));
     }
+  }
+
+  private createAudioBuffer(numberOfChannels: number, length: number, sampleRate: number): AudioBuffer {
+    if (this.ctx && typeof this.ctx.createBuffer === 'function') {
+      return this.ctx.createBuffer(numberOfChannels, length, sampleRate);
+    }
+    return createMockAudioBuffer(numberOfChannels, length, sampleRate);
   }
 
   public getContext(): AudioContext | null {
@@ -116,8 +145,12 @@ export class AudioManager {
     numBars: number,
     bpm: number
   ): { startSec: number; durationSec: number; totalBars: number; totalAvailableBars: number } | null {
+    this.init();
     const raw = this.originalRawBuffer || this.buffer;
-    if (!raw || !this.ctx) return null;
+    if (!raw) return null;
+    if (!this.originalRawBuffer) {
+      this.originalRawBuffer = raw;
+    }
 
     const secondsPerBar = (60 / Math.max(20, bpm || 120)) * 4;
     const totalAvailableBars = Math.max(1, Math.floor(raw.duration / secondsPerBar));
@@ -128,15 +161,18 @@ export class AudioManager {
     const durationSec = safeNumBars * secondsPerBar;
 
     const sampleRate = raw.sampleRate;
-    const startSample = Math.floor(startSec * sampleRate);
-    const numSamples = Math.floor(durationSec * sampleRate);
+    const startSample = Math.round(startSec * sampleRate);
+    const numSamples = Math.round(durationSec * sampleRate);
 
     // Create a new sliced AudioBuffer with precision
-    const trimmed = this.ctx.createBuffer(
+    const trimmed = this.createAudioBuffer(
       raw.numberOfChannels,
       numSamples,
       sampleRate
     );
+
+    // 3ms Hann micro-fade at loop boundaries to prevent clicks/pops
+    const microFadeSamples = Math.min(Math.round(sampleRate * 0.003), Math.floor(numSamples / 8));
 
     for (let ch = 0; ch < raw.numberOfChannels; ch++) {
       const srcData = raw.getChannelData(ch);
@@ -144,6 +180,18 @@ export class AudioManager {
       const copyLen = Math.min(numSamples, Math.max(0, srcData.length - startSample));
       for (let i = 0; i < copyLen; i++) {
         dstData[i] = srcData[startSample + i];
+      }
+
+      // Smooth loop boundaries
+      if (microFadeSamples > 0) {
+        for (let i = 0; i < microFadeSamples; i++) {
+          const gain = 0.5 * (1 - Math.cos((Math.PI * i) / microFadeSamples));
+          dstData[i] *= gain;
+          const endIdx = numSamples - 1 - i;
+          if (endIdx >= 0) {
+            dstData[endIdx] *= gain;
+          }
+        }
       }
     }
 
@@ -624,7 +672,7 @@ export class AudioManager {
 
     const sampleRate = source.sampleRate;
     const totalSamples = Math.max(1, Math.round(totalDuration * sampleRate));
-    const target = this.ctx.createBuffer(2, totalSamples, sampleRate);
+    const target = this.createAudioBuffer(2, totalSamples, sampleRate);
     const outL = target.getChannelData(0);
     const outR = target.getChannelData(1);
 
@@ -633,7 +681,7 @@ export class AudioManager {
 
     const isCustomSample = this.hasCustomFile;
 
-    if (isCustomSample) {
+    if (isCustomSample || settings.isAudioTrimmed) {
       const srcBuffer = settings.isAudioTrimmed ? (this.buffer || source) : (this.originalRawBuffer || source);
       const curSrcL = srcBuffer.getChannelData(0);
       const curSrcR = srcBuffer.numberOfChannels > 1 ? srcBuffer.getChannelData(1) : curSrcL;
@@ -708,12 +756,22 @@ export class AudioManager {
       }
     }
 
-    // 3. 25ms Anti-click micro fade out at the very end
-    const fadeSamples = Math.round(sampleRate * 0.025);
+    // 3. Clean loop boundaries and micro-fades to eliminate clicks/pops
+    if (!hasIntro) {
+      const fadeInSamples = Math.min(Math.round(sampleRate * 0.005), totalSamples);
+      for (let f = 0; f < fadeInSamples; f++) {
+        const gain = 0.5 * (1 - Math.cos((Math.PI * f) / fadeInSamples));
+        outL[f] *= gain;
+        outR[f] *= gain;
+      }
+    }
+
+    // 25ms Anti-click micro fade out at the very end
+    const fadeSamples = Math.min(Math.round(sampleRate * 0.025), totalSamples);
     for (let f = 0; f < fadeSamples; f++) {
       const idx = totalSamples - 1 - f;
       if (idx >= 0) {
-        const gain = f / fadeSamples;
+        const gain = 0.5 * (1 - Math.cos((Math.PI * f) / fadeSamples));
         outL[idx] *= gain;
         outR[idx] *= gain;
       }
