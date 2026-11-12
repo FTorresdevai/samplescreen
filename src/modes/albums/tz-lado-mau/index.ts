@@ -572,11 +572,15 @@ function drawSeismicMagmaWaveform(
     const px = Math.max(x + 15, Math.min(x + w - 15, x + 30 + (Math.sin(currentTime * 1.8 + i * 2.4) * 45 + (i * 29) % (w - 60))));
     const py = (y + h + 10) - progress;
     const alpha = Math.max(0, Math.min(0.75, 1 - progress / (h + 20)));
-    ctx.fillStyle = i % 2 === 0 ? `rgba(255, 69, 0, ${alpha})` : `rgba(255, 170, 0, ${alpha})`;
-    ctx.shadowColor = '#ff4500';
-    ctx.shadowBlur = 6;
+    const r = 1.0 + (i % 3) * 0.7;
+    // Halo as a wide low-alpha disc instead of shadowBlur
+    ctx.fillStyle = `rgba(255, 69, 0, ${alpha * 0.18})`;
     ctx.beginPath();
-    ctx.arc(px, py, 1.0 + (i % 3) * 0.7, 0, Math.PI * 2);
+    ctx.arc(px, py, r + 3.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = i % 2 === 0 ? `rgba(255, 69, 0, ${alpha})` : `rgba(255, 170, 0, ${alpha})`;
+    ctx.beginPath();
+    ctx.arc(px, py, r, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.shadowBlur = 0;

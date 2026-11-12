@@ -638,11 +638,15 @@ function drawLiquidGoldWaveform(
     const px = Math.max(x + 12, Math.min(x + w - 12, x + 30 + (Math.sin(currentTime * 1.5 + i * 2.1) * 45 + (i * 27) % (w - 60))));
     const py = (y + h + 15) - progress;
     const alpha = Math.max(0, Math.min(0.85, 1 - progress / (h + 30)));
-    ctx.fillStyle = `rgba(254, 240, 138, ${alpha})`;
-    ctx.shadowColor = '#f59e0b';
-    ctx.shadowBlur = 8;
+    const r = 1.2 + (i % 3) * 0.7;
+    // Halo as a wide low-alpha disc instead of shadowBlur (35 blurs/frame were the costliest part)
+    ctx.fillStyle = `rgba(245, 158, 11, ${alpha * 0.18})`;
     ctx.beginPath();
-    ctx.arc(px, py, 1.2 + (i % 3) * 0.7, 0, Math.PI * 2);
+    ctx.arc(px, py, r + 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = `rgba(254, 240, 138, ${alpha})`;
+    ctx.beginPath();
+    ctx.arc(px, py, r, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.shadowBlur = 0;

@@ -15,15 +15,23 @@ export interface KeyboardGeometry {
 
 const WHITE_PITCH_CLASSES = [0, 2, 4, 5, 7, 9, 11];
 
+// Pitch extremes per MIDI object, so frames do not rescan every note
+const pitchCache = new WeakMap<ParsedMidi, { minPitch: number; maxPitch: number }>();
+function getPitchExtremes(midi: ParsedMidi) {
+  let r = pitchCache.get(midi);
+  if (!r) {
+    const notes = midi.notes || [];
+    r = notes.length > 0
+      ? { minPitch: Math.min(...notes.map(n => n.midi)), maxPitch: Math.max(...notes.map(n => n.midi)) }
+      : { minPitch: 36, maxPitch: 84 };
+    pitchCache.set(midi, r);
+  }
+  return r;
+}
+
 export function computeKeyboardGeometry(midi: ParsedMidi, region: ModelRegion): KeyboardGeometry {
   const { x, width: w } = region;
-  const allNotes = midi.notes || [];
-  let minPitch = 36;
-  let maxPitch = 84;
-  if (allNotes.length > 0) {
-    minPitch = Math.min(...allNotes.map(n => n.midi));
-    maxPitch = Math.max(...allNotes.map(n => n.midi));
-  }
+  const { minPitch, maxPitch } = getPitchExtremes(midi);
   const lowestOctave = Math.max(1, Math.min(3, Math.floor(minPitch / 12)));
   const highestOctave = Math.min(7, Math.max(lowestOctave + 3, Math.ceil(maxPitch / 12)));
   const startKey = lowestOctave * 12;
