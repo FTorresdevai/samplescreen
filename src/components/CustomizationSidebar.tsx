@@ -132,7 +132,7 @@ export const CustomizationSidebar: React.FC<CustomizationSidebarProps> = ({
 
   const trimStartTime = (currentStartBar - 1) * secondsPerBar;
   const trimDurationTime = currentBars * secondsPerBar;
-  const trimEndTime = Math.min(effectiveRawDuration || (trimStartTime + trimDurationTime), trimStartTime + trimDurationTime);
+  const trimEndTime = trimStartTime + trimDurationTime;
 
   const formatMinSec = (sec: number) => {
     const m = Math.floor(sec / 60);
@@ -296,7 +296,7 @@ export const CustomizationSidebar: React.FC<CustomizationSidebarProps> = ({
               <span>Start at Bar:</span>
               <span className="font-mono text-amber-400 font-bold">Bar {currentStartBar} ({formatMinSec(trimStartTime)})</span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <input
                 type="range"
                 min={1}
@@ -308,6 +308,14 @@ export const CustomizationSidebar: React.FC<CustomizationSidebarProps> = ({
                 }}
                 className="flex-1 h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
               />
+              <button
+                type="button"
+                onClick={() => onUpdate({ audioTrimStartBar: Math.max(1, currentStartBar - 1) })}
+                className="w-6 h-6 flex items-center justify-center rounded bg-zinc-850 hover:bg-zinc-700 text-zinc-300 font-mono text-xs font-bold border border-white/[0.08] transition"
+                title="Previous bar"
+              >
+                -
+              </button>
               <input
                 type="number"
                 min={1}
@@ -317,8 +325,16 @@ export const CustomizationSidebar: React.FC<CustomizationSidebarProps> = ({
                   const val = Math.max(1, Math.min(totalAvailableBars, parseInt(e.target.value) || 1));
                   onUpdate({ audioTrimStartBar: val });
                 }}
-                className="w-14 bg-[#141721] border border-white/[0.08] rounded px-2 py-1 text-xs font-mono font-bold text-center text-white"
+                className="w-12 bg-[#141721] border border-white/[0.08] rounded px-1.5 py-1 text-xs font-mono font-bold text-center text-white"
               />
+              <button
+                type="button"
+                onClick={() => onUpdate({ audioTrimStartBar: Math.min(totalAvailableBars, currentStartBar + 1) })}
+                className="w-6 h-6 flex items-center justify-center rounded bg-zinc-850 hover:bg-zinc-700 text-zinc-300 font-mono text-xs font-bold border border-white/[0.08] transition"
+                title="Next bar"
+              >
+                +
+              </button>
             </div>
           </div>
 
@@ -360,8 +376,16 @@ export const CustomizationSidebar: React.FC<CustomizationSidebarProps> = ({
           </div>
 
           {/* Slice Time Range Preview */}
-          <div className="p-2 bg-amber-500/5 rounded-lg border border-amber-500/20 text-center font-mono text-[11px] text-amber-300">
-            Loop Slice: <span className="font-bold text-white">{formatMinSec(trimStartTime)} → {formatMinSec(trimEndTime)}</span> ({trimDurationTime.toFixed(1)}s • {currentBars} bars)
+          <div className={`p-2.5 rounded-lg border text-center font-mono text-[11px] transition ${
+            settings.isAudioTrimmed
+              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 shadow-sm'
+              : 'bg-amber-500/5 border-amber-500/20 text-amber-300'
+          }`}>
+            <span className="text-zinc-400 mr-1.5">{settings.isAudioTrimmed ? 'Active Slice:' : 'Selected Slice:'}</span>
+            <span className="font-bold text-white">{formatMinSec(trimStartTime)} → {formatMinSec(trimEndTime)}</span>{' '}
+            <span className={settings.isAudioTrimmed ? 'text-emerald-400 font-semibold' : 'text-amber-400/90'}>
+              ({trimDurationTime.toFixed(1)}s • {currentBars} bars)
+            </span>
           </div>
 
           {/* Trim Action Buttons */}
@@ -371,12 +395,12 @@ export const CustomizationSidebar: React.FC<CustomizationSidebarProps> = ({
               className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg font-bold text-xs bg-amber-400 hover:bg-amber-300 text-black shadow-md shadow-amber-400/20 transition active:scale-98"
             >
               <Scissors className="w-3.5 h-3.5" />
-              <span>Apply Beat Trim</span>
+              <span>{settings.isAudioTrimmed ? 'Update Beat Trim' : 'Apply Beat Trim'}</span>
             </button>
             {settings.isAudioTrimmed && (
               <button
                 onClick={() => onResetAudioTrim?.()}
-                className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg font-mono text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-white/[0.08] transition"
+                className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg font-mono text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-white/[0.08] transition hover:text-white"
                 title="Reset to Full Audio"
               >
                 <RotateCcw className="w-3.5 h-3.5 text-zinc-400" />

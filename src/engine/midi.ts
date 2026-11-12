@@ -365,3 +365,61 @@ export function buildUnifiedTimelineMidi(
     timing,
   };
 }
+
+/**
+ * Slices and offsets MIDI notes to synchronize with a trimmed audio loop.
+ * - Notes before startSec must be discarded.
+ * - Notes between startSec and startSec + durationSec must have their timing offset: note.time -= startSec.
+ * - Notes after startSec + durationSec must be discarded.
+ * - Clamps note duration to remain within the trimmed loop boundary.
+ */
+export function sliceMidiNotes(
+  notes: MidiNote[] | undefined,
+  startSec: number,
+  durationSec: number
+): MidiNote[] {
+  if (!notes || notes.length === 0) return [];
+
+  const endSec = startSec + durationSec;
+  const sliced: MidiNote[] = [];
+
+  for (const note of notes) {
+    if (note.time >= startSec && note.time < endSec) {
+      const newTime = Math.max(0, Number((note.time - startSec).toFixed(6)));
+      const maxAllowedDuration = durationSec - newTime;
+      const newDuration = note.duration > maxAllowedDuration
+        ? Math.max(0.01, Number(maxAllowedDuration.toFixed(6)))
+        : note.duration;
+
+      sliced.push({
+        ...note,
+        time: newTime,
+        duration: newDuration,
+      });
+    }
+  }
+
+  sliced.sort((a, b) => a.time - b.time);
+  return sliced;
+}
+
+/**
+ * Synchronizes loaded MIDI data with trimmed audio:
+ * Slices notes between startSec and startSec + durationSec, offsets note timing,
+ * and sets midi.duration = durationSec, midi.totalBars = numBars.
+ */
+export function sliceMidiData(
+  midi: ParsedMidi,
+  startSec: number,
+  durationSec: number,
+  numBars: number
+): ParsedMidi {
+  const slicedNotes = sliceMidiNotes(midi.notes, startSec, durationSec);
+  return {
+    ...midi,
+    notes: slicedNotes,
+    duration: durationSec,
+    totalBars: numBars,
+  };
+}
+
