@@ -553,106 +553,162 @@ function drawSeismicMagmaWaveform(
 
   const centerY = y + h / 2;
 
-  // Volcanic crevasse backdrop
-  const bgGrad = ctx.createRadialGradient(x + w / 2, centerY, 30, x + w / 2, centerY, w * 0.6);
-  bgGrad.addColorStop(0, '#1c0502');
-  bgGrad.addColorStop(0.5, '#0b0201');
+  // 1. Deep Volcanic Charcoal & CRT Glass Backdrop
+  const bgGrad = ctx.createRadialGradient(x + w / 2, centerY, 30, x + w / 2, centerY, w * 0.65);
+  bgGrad.addColorStop(0, '#1c0603');
+  bgGrad.addColorStop(0.5, '#0b0302');
   bgGrad.addColorStop(1, '#040101');
   ctx.fillStyle = bgGrad;
   ctx.fillRect(x, y, w, h);
 
-  // Volcanic ember sparks bursting (clamped strictly inside box)
-  for (let i = 0; i < 40; i++) {
-    const seed = i * 53.3;
-    const progress = (currentTime * 55 + seed + analysis.bass * 80) % (h + 30);
-    const px = Math.max(x + 12, Math.min(x + w - 12, x + 30 + (Math.sin(currentTime * 2 + i * 2.7) * 55 + (i * 31) % (w - 60))));
-    const py = (y + h + 15) - progress;
-    const alpha = Math.max(0, Math.min(0.9, 1 - progress / (h + 30)));
-    ctx.fillStyle = i % 2 === 0 ? `rgba(255, 69, 0, ${alpha})` : `rgba(255, 170, 0, ${alpha})`;
-    ctx.shadowColor = '#ff3b00';
-    ctx.shadowBlur = 10;
+  // 2. Technical Engineering Graticule (Subtle 6% grid + 0dB Axis)
+  ctx.strokeStyle = 'rgba(255, 69, 0, 0.08)';
+  ctx.lineWidth = 1;
+  const numGridX = 10;
+  const gridStepX = w / numGridX;
+  for (let gx = 1; gx < numGridX; gx++) {
     ctx.beginPath();
-    ctx.arc(px, py, 1.2 + (i % 3) * 0.8, 0, Math.PI * 2);
+    ctx.moveTo(x + gx * gridStepX, y);
+    ctx.lineTo(x + gx * gridStepX, y + h);
+    ctx.stroke();
+  }
+
+  const numGridY = 8;
+  const gridStepY = h / numGridY;
+  for (let gy = 1; gy < numGridY; gy++) {
+    const ly = y + gy * gridStepY;
+    ctx.beginPath();
+    ctx.moveTo(x, ly);
+    ctx.lineTo(x + w, ly);
+    ctx.stroke();
+  }
+
+  // 0dB Center Dashed Axis
+  ctx.strokeStyle = 'rgba(255, 140, 0, 0.25)';
+  ctx.lineWidth = 1.2;
+  ctx.setLineDash([4, 6]);
+  ctx.beginPath();
+  ctx.moveTo(x, centerY);
+  ctx.lineTo(x + w, centerY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Telemetry Labels (JetBrains Mono)
+  ctx.font = '700 8.5px "JetBrains Mono", monospace';
+  ctx.fillStyle = 'rgba(255, 140, 0, 0.55)';
+  ctx.textAlign = 'left';
+  ctx.fillText('+1.0', x + 8, y + 16);
+  ctx.fillText(' 0.0', x + 8, centerY - 4);
+  ctx.fillText('-1.0', x + 8, y + h - 10);
+
+  ctx.textAlign = 'right';
+  ctx.fillText('TEKTRONIX CRT // PCM STEREO // 44.1kHz', x + w - 10, y + 16);
+
+  // 3. Volcanic Ember Sparks drifting with audio energy
+  const bass = analysis?.bass ?? 0.2;
+  for (let i = 0; i < 36; i++) {
+    const seed = i * 47.7;
+    const progress = (currentTime * 45 + seed + bass * 65) % (h + 20);
+    const px = Math.max(x + 15, Math.min(x + w - 15, x + 30 + (Math.sin(currentTime * 1.8 + i * 2.4) * 45 + (i * 29) % (w - 60))));
+    const py = (y + h + 10) - progress;
+    const alpha = Math.max(0, Math.min(0.75, 1 - progress / (h + 20)));
+    ctx.fillStyle = i % 2 === 0 ? `rgba(255, 69, 0, ${alpha})` : `rgba(255, 170, 0, ${alpha})`;
+    ctx.shadowColor = '#ff4500';
+    ctx.shadowBlur = 6;
+    ctx.beginPath();
+    ctx.arc(px, py, 1.0 + (i % 3) * 0.7, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.shadowBlur = 0;
 
-  // Seismic Magma Plasma Waveform with High-Voltage Electric Spikes
-  const numPoints = 140;
-  const waveW = w - 40;
-  const startX = x + 20;
-  const step = waveW / numPoints;
-  const topPoints: { x: number; y: number }[] = [];
-  const botPoints: { x: number; y: number }[] = [];
-
-  const waveData = analysis.waveform;
+  // 4. REAL TIME-DOMAIN OSCILLOSCOPE (High-Voltage Bipolar Signal)
+  const waveData = analysis?.waveform;
   const waveLen = waveData ? waveData.length : 0;
-  const fftData = analysis.fft;
-  const maxAmp = (h / 2) - 22; // strict headroom
+  const numPoints = 220;
+  const step = (w - 24) / numPoints;
+  const startX = x + 12;
+  const maxAmp = (h / 2) - 20; // Full stage vertical amplitude
+  const sensitivity = (settings.audioSensitivity || 1.0) * 1.75;
+
+  const pointsPrimary: { x: number; y: number }[] = [];
+  const pointsStereo: { x: number; y: number }[] = [];
 
   for (let i = 0; i <= numPoints; i++) {
-    const px = startX + i * step;
     const norm = i / numPoints;
-    const env = Math.sin(norm * Math.PI);
+    const px = startX + i * step;
 
-    let rawVal = 0;
+    let sampleVal = 0;
+    let stereoShift = 0;
     if (waveLen > 0) {
-      const sampleIdx = Math.floor(norm * (waveLen - 1));
-      rawVal = Math.abs((waveData[sampleIdx] - 128) / 128);
+      const idx = Math.floor(norm * (waveLen - 1));
+      sampleVal = ((waveData[idx] || 128) - 128) / 128; // -1 to +1
+
+      const idx2 = Math.floor(((norm + 0.035) % 1) * (waveLen - 1));
+      stereoShift = ((waveData[idx2] || 128) - 128) / 128;
     }
-    const fftIdx = Math.floor(norm * 48);
-    const fftVal = (fftData && fftData[fftIdx]) ? (fftData[fftIdx] / 255) : 0;
 
-    // High-frequency seismic jitter for trap 808 distortion
-    const jitter = (Math.sin(norm * 65 + currentTime * 12) * Math.cos(norm * 120)) * 0.12 * analysis.treble;
-    const kickDisplacement = Math.exp(-Math.pow((norm - 0.45) * 6, 2)) * analysis.bass * 0.45;
+    // Kinetic transient response: bass drops increase the swing
+    const kickDisplacement = Math.sin(norm * 14 + currentTime * 6) * bass * 0.18;
+    const primaryY = centerY - Math.max(-1, Math.min(1, (sampleVal * 1.4 + kickDisplacement) * sensitivity)) * maxAmp;
+    const stereoY = centerY - Math.max(-1, Math.min(1, (stereoShift * 1.35) * sensitivity)) * (maxAmp * 0.88);
 
-    const combined = Math.max(0.05, rawVal * 0.55 + fftVal * 0.35 + jitter + kickDisplacement) * env;
-    // CLAMP FINAL HEIGHT STRICTLY TO maxAmp!
-    const finalH = Math.min(maxAmp, Math.max(5, combined * maxAmp));
-
-    topPoints.push({ x: px, y: centerY - finalH });
-    botPoints.push({ x: px, y: centerY + finalH });
+    pointsPrimary.push({ x: px, y: primaryY });
+    pointsStereo.push({ x: px, y: stereoY });
   }
 
-  // Magma Plasma Gradient Fill
-  const safeMaxAmp = Number.isFinite(maxAmp) ? Math.max(1, maxAmp) : 50;
-  const safeCenterY = Number.isFinite(centerY) ? centerY : y + h / 2;
-  const magmaFillGrad = ctx.createLinearGradient(0, safeCenterY - safeMaxAmp, 0, safeCenterY + safeMaxAmp);
-  magmaFillGrad.addColorStop(0, 'rgba(254, 215, 170, 0.95)');
-  magmaFillGrad.addColorStop(0.2, 'rgba(249, 115, 22, 0.75)');
-  magmaFillGrad.addColorStop(0.5, 'rgba(185, 28, 28, 0.35)');
-  magmaFillGrad.addColorStop(0.8, 'rgba(249, 115, 22, 0.75)');
-  magmaFillGrad.addColorStop(1, 'rgba(254, 215, 170, 0.95)');
-
+  // Pass 1: CRT Phosphor Ghost Trail (Persistence Decay)
+  ctx.strokeStyle = 'rgba(255, 69, 0, 0.22)';
+  ctx.lineWidth = 4.0;
   ctx.beginPath();
-  ctx.moveTo(topPoints[0].x, topPoints[0].y);
-  for (let i = 1; i < topPoints.length; i++) ctx.lineTo(topPoints[i].x, topPoints[i].y);
-  for (let i = botPoints.length - 1; i >= 0; i--) ctx.lineTo(botPoints[i].x, botPoints[i].y);
-  ctx.closePath();
-  ctx.fillStyle = magmaFillGrad;
-  ctx.shadowColor = '#ff2200';
-  ctx.shadowBlur = 20 * (settings.glowIntensity || 1.1);
-  ctx.fill();
-  ctx.shadowBlur = 0;
+  ctx.moveTo(pointsPrimary[0].x, pointsPrimary[0].y + 1);
+  for (let i = 1; i < pointsPrimary.length; i++) ctx.lineTo(pointsPrimary[i].x, pointsPrimary[i].y + 1);
+  ctx.stroke();
 
-  // White-hot Lightning Core line
+  // Pass 2: Secondary Stereo Trace (Cyan/Amber Differential)
+  ctx.strokeStyle = 'rgba(255, 140, 0, 0.45)';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(pointsStereo[0].x, pointsStereo[0].y);
+  for (let i = 1; i < pointsStereo.length; i++) ctx.lineTo(pointsStereo[i].x, pointsStereo[i].y);
+  ctx.stroke();
+
+  // Pass 3: Primary White-Hot Oscilloscope Beam with Magma Phosphor Glow
   ctx.strokeStyle = '#ffffff';
   ctx.lineWidth = 2.2;
-  ctx.shadowColor = '#ffedd5';
-  ctx.shadowBlur = 10;
+  ctx.shadowColor = '#ff4500';
+  ctx.shadowBlur = 14 * (settings.glowIntensity || 1.1);
 
   ctx.beginPath();
-  ctx.moveTo(topPoints[0].x, topPoints[0].y);
-  for (let i = 1; i < topPoints.length; i++) ctx.lineTo(topPoints[i].x, topPoints[i].y);
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(botPoints[0].x, botPoints[0].y);
-  for (let i = 1; i < botPoints.length; i++) ctx.lineTo(botPoints[i].x, botPoints[i].y);
+  ctx.moveTo(pointsPrimary[0].x, pointsPrimary[0].y);
+  for (let i = 1; i < pointsPrimary.length; i++) ctx.lineTo(pointsPrimary[i].x, pointsPrimary[i].y);
   ctx.stroke();
   ctx.shadowBlur = 0;
 
-  ctx.restore(); // remove clip
-  ctx.shadowBlur = 0;
+  // 5. Transient Laser Shockwave Flare (@projetociberdelia) on Heavy 808
+  if (bass > 0.65) {
+    const flareAlpha = Math.min(0.65, (bass - 0.55) * 2.0);
+    ctx.strokeStyle = `rgba(255, 230, 200, ${flareAlpha})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x + 20, centerY);
+    ctx.lineTo(x + w - 20, centerY);
+    ctx.stroke();
+
+    ctx.strokeStyle = `rgba(255, 69, 0, ${flareAlpha * 0.7})`;
+    ctx.lineWidth = 3.0;
+    ctx.beginPath();
+    ctx.moveTo(x + 50, centerY);
+    ctx.lineTo(x + w - 50, centerY);
+    ctx.stroke();
+  }
+
+  // 6. Bottom Status Readout (Audio Telemetry)
+  ctx.font = '600 8px "JetBrains Mono", monospace';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+  ctx.textAlign = 'left';
+  ctx.fillText(`RMS: ${((analysis.rms || 0) * 100).toFixed(0)}%`, x + 16, y + h - 8);
+  ctx.textAlign = 'right';
+  ctx.fillText(`808 PEAK: ${(bass * 100).toFixed(0)}%`, x + w - 16, y + h - 8);
+
+  ctx.restore();
 }

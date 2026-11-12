@@ -117,7 +117,12 @@ export class CanvasRenderer {
         synthRegion.y,
         synthRegion.width,
         synthRegion.height,
-        isGoldSynth ? 'gold' : 'crimson'
+        isGoldSynth ? 'gold' : 'crimson',
+        {
+          currentTime,
+          analysis,
+          bpm: settings.bpm,
+        }
       );
     } else {
       const renderSynth = getSynthRenderer(settings.synthModel);
