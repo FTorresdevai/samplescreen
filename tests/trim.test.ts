@@ -175,3 +175,22 @@ test('Trim: Reset functionality restoring original audio and MIDI', () => {
   assert.strictEqual(secondResetDuration, 32.0);
   assert.strictEqual(audioManager.getBuffer()?.duration, 32.0);
 });
+
+test('Trim: snapToBar rounds to the nearest bar boundary and clamps', async () => {
+  const { snapToBar } = await import('../src/core/trim.ts');
+  // 120 BPM → 2 s per bar
+  assert.strictEqual(snapToBar(0, 120, 10), 1);
+  assert.strictEqual(snapToBar(2.9, 120, 10), 2);   // 1.45 bars → boundary 1 → bar 2
+  assert.strictEqual(snapToBar(3.1, 120, 10), 3);   // 1.55 bars → boundary 2 → bar 3
+  assert.strictEqual(snapToBar(-5, 120, 10), 1);    // clamp low
+  assert.strictEqual(snapToBar(999, 120, 10), 11);  // clamp at end boundary (after bar 10)
+});
+
+test('Trim: computePeaks length, silence and full scale', async () => {
+  const { computePeaks } = await import('../src/core/trim.ts');
+  assert.strictEqual(computePeaks(new Float32Array(1000), 50).length, 50);
+  assert.ok(computePeaks(new Float32Array(1000), 50).every(v => v === 0));
+  const loud = new Float32Array(1000).fill(-1);
+  assert.ok(computePeaks(loud, 50).every(v => v === 1));
+  assert.strictEqual(computePeaks(new Float32Array(0), 10).length, 10);
+});
