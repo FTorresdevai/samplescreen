@@ -12,7 +12,7 @@ import { VideoExporter, ExportProgress } from './engine/exporter';
 import { ParsedMidi, VisualizerSettings } from './types';
 import { validateAudioFile, validateMidiFile, sanitizeText } from './core/validator';
 import { parseSampleFileName } from './core/sample-parser';
-import { MODEL_REGISTRY } from './models/registry';
+import { DEFAULT_MODE_ID, findManifest } from './modes/registry';
 
 export const App: React.FC = () => {
   // References
@@ -24,14 +24,15 @@ export const App: React.FC = () => {
   // URL params initialization for deep-linking and visual testing
   const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
   const rawModel = urlParams?.get('model');
-  const initialModel = (rawModel && rawModel in MODEL_REGISTRY) ? rawModel : 'take-care';
+  const initialManifest = findManifest(rawModel) ?? findManifest(DEFAULT_MODE_ID)!;
+  const initialDefaults = initialManifest.defaults ?? {};
   const initialWaveform = urlParams?.get('waveform') === 'true';
 
   // Settings State with complete feature set matching reference video
   const [settings, setSettings] = useState<VisualizerSettings>({
-    title: initialModel === 'tz-lado-mau' ? 'LADO MAU' : 'FEELS THE SAME',
-    bpm: initialModel === 'tz-lado-mau' ? 140 : 120,
-    key: initialModel === 'tz-lado-mau' ? 'D MIN' : 'E MIN',
+    title: initialDefaults.title ?? 'FEELS THE SAME',
+    bpm: initialDefaults.bpm ?? 120,
+    key: initialDefaults.key ?? 'E MIN',
     producerHandle: 'PRODBYSERROT',
     watermark: 'samplescreen visualizer • 1080x1920 @ 60 fps',
 
@@ -49,7 +50,7 @@ export const App: React.FC = () => {
     showPreviewHud: false,
     fitReelsSafeZone: false,
 
-    centerVisualizerMode: initialModel,
+    modeId: initialManifest.id,
     loopBars: 10,
     noteNameTags: true,
     showProgressDashes: true,

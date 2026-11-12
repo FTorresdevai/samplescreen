@@ -1,9 +1,8 @@
 import { AudioAnalysis, MidiNote, ParsedMidi, VisualizerSettings, TimingInfo, ModelRegion, ModelDrawContext, SynthRegion } from '../types';
 import { hexToRgbaStr } from './palettes';
 import { formatNoteName, detectChord } from './chords';
-import { getModelRenderer } from '../models/registry';
-import { getSynthRenderer } from '../hardware/registry';
-import { drawStudioTapeMachine } from '../hardware/tape-machine';
+import { RenderModules } from './modules';
+import { isWaveformView } from '../core/mode-resolution';
 import { roundRect } from '../shared/canvas-utils';
 import { getActiveNotes } from './midi';
 
@@ -25,6 +24,7 @@ export class CanvasRenderer {
     midi: ParsedMidi,
     analysis: AudioAnalysis,
     settings: VisualizerSettings,
+    modules: RenderModules | null,
     introInfo?: TimingInfo
   ) {
     const { ctx, canvas } = this;
@@ -98,10 +98,6 @@ export class CanvasRenderer {
     // 4. Hardware Console (Dispatched via Hardware Registry with exact pixel-calibrated coordinates)
     const synthY = 195;
     const synthH = 570;
-    const currentMode = settings.centerVisualizerMode || 'take-care';
-    const isGoldSynth = currentMode === 'take-care';
-    const isWaveform = settings.waveformMode ?? (!midi || midi.notes.length === 0);
-
     const synthRegion: SynthRegion = {
       x: contentStartX,
       y: synthY,
@@ -109,33 +105,16 @@ export class CanvasRenderer {
       height: synthH,
     };
 
-    if (isWaveform) {
-      // In Waveform Mode: Globally dispatch the Master Tape Machine Mark II (Zero piano keys!)
-      drawStudioTapeMachine(
-        ctx,
-        synthRegion.x,
-        synthRegion.y,
-        synthRegion.width,
-        synthRegion.height,
-        isGoldSynth ? 'gold' : 'crimson',
-        {
-          currentTime,
-          analysis,
-          bpm: settings.bpm,
-        }
-      );
-    } else {
-      const renderSynth = getSynthRenderer(settings.synthModel);
-      renderSynth(ctx, {
-        region: synthRegion,
-        currentTime,
-        midi,
-        activeNotes,
-        analysis,
-        settings,
-        colorTheme: isGoldSynth ? 'gold' : 'crimson',
-      });
-    }
+    // Modules still loading (first frame after a mode switch): leave the slots empty.
+    modules?.hardware.draw(ctx, {
+      region: synthRegion,
+      currentTime,
+      midi,
+      activeNotes,
+      analysis,
+      settings,
+      theme: modules.theme,
+    });
 
     // 5. Active Visual Model Card (Bottom Half: y = 795 to 1465, h = 670px)
     const modelY = 795;
@@ -163,11 +142,10 @@ export class CanvasRenderer {
       analysis,
       settings,
       introInfo: (introInfo && 'hasIntro' in introInfo) ? (introInfo as TimingInfo) : undefined,
-      isWaveformMode: settings.waveformMode ?? (!midi || midi.notes.length === 0),
+      isWaveformMode: isWaveformView(settings, !!midi && midi.notes.length > 0),
     };
 
-    const renderModel = getModelRenderer(currentMode);
-    renderModel(ctx, modelDrawContext);
+    modules?.mode.draw(ctx, modelDrawContext);
 
     // 7. Bottom Section: Large Glowing Active Notes, Bar Dashes, and Watermark
     this.drawBottomSection(centerX, 1680, currentTime, loopTime, duration, midi, activeNotes, settings);

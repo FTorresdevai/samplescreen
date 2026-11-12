@@ -1,6 +1,6 @@
-import { ModelDrawContext } from '../../types';
-import { hexToRgbaStr } from '../../engine/palettes';
-import { formatNoteName } from '../../engine/chords';
+import { ModelDrawContext, ModeModule } from '../../../types';
+import { hexToRgbaStr } from '../../../engine/palettes';
+import { formatNoteName } from '../../../engine/chords';
 
 export function drawOrbitalMoonModel(ctx: CanvasRenderingContext2D, context: ModelDrawContext) {
   const { region, loopTime, duration, midi, analysis, settings, isWaveformMode } = context;
@@ -154,3 +154,5 @@ export function drawOrbitalMoonModel(ctx: CanvasRenderingContext2D, context: Mod
 
   ctx.restore();
 }
+
+export default { draw: drawOrbitalMoonModel } satisfies ModeModule;

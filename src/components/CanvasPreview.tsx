@@ -4,6 +4,7 @@ import { AudioManager } from '../engine/audio';
 import { ParsedMidi, VisualizerSettings } from '../types';
 import { buildUnifiedTimelineMidi } from '../engine/midi';
 import { calculateFrameProgress } from '../core/timeline';
+import { loadRenderModules, peekRenderModules } from '../engine/modules';
 import { Maximize2, Minimize2, Edit3, ShieldAlert, Eye, EyeOff } from 'lucide-react';
 
 interface CanvasPreviewProps {
@@ -65,6 +66,12 @@ export const CanvasPreview: React.FC<CanvasPreviewProps> = ({
     settings.exportLoops,
   ]);
 
+  // Lazy-load the active mode + hardware chunks; the RAF loop picks them up via peek once ready.
+  const hasMidi = unifiedMidi.notes.length > 0;
+  useEffect(() => {
+    loadRenderModules(settings, hasMidi).catch(err => console.error('[SampleScreen] Module load failed:', err));
+  }, [settings.modeId, settings.synthModel, settings.waveformMode, hasMidi]);
+
   // Main 60 FPS Animation loop for real-time preview with seamless unified timeline and intro awareness.
   // Pauses rendering while an export is actively generating frames to free GPU/CPU bandwidth.
   // Throttles rendering to 60 FPS on high refresh rate displays (120Hz/144Hz) to avoid excessive GPU overhead.
@@ -84,7 +91,8 @@ export const CanvasPreview: React.FC<CanvasPreviewProps> = ({
             const currentTime = audioManager.getCurrentTime();
             const analysis = audioManager.getRealtimeAnalysis();
             const { timingInfo } = calculateFrameProgress(currentTime, timing, settings, unifiedMidi);
-            rendererRef.current.render(currentTime, unifiedMidi, analysis, settings, timingInfo);
+            const modules = peekRenderModules(settings, hasMidi);
+            rendererRef.current.render(currentTime, unifiedMidi, analysis, settings, modules, timingInfo);
           } catch (err) {
             console.error('[SampleScreen] Canvas render loop error:', err);
           }
@@ -94,7 +102,7 @@ export const CanvasPreview: React.FC<CanvasPreviewProps> = ({
 
     animId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(animId);
-  }, [rendererRef, audioManager, unifiedMidi, timing, settings, isExporting]);
+  }, [rendererRef, audioManager, unifiedMidi, timing, settings, isExporting, hasMidi]);
 
   const toggleFullscreen = () => {
     if (!containerRef.current) return;

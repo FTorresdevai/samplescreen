@@ -46,7 +46,7 @@ test('Timeline: calculateFrameProgress with and without intro', () => {
     showSafeZoneGuides: false,
     showPreviewHud: false,
     fitReelsSafeZone: false,
-    centerVisualizerMode: 'take-care',
+    modeId: 'take-care',
     loopBars: 8,
     noteNameTags: true,
     showProgressDashes: true,

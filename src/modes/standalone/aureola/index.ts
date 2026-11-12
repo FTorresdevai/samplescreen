@@ -1,6 +1,6 @@
-import { ModelDrawContext } from '../../types';
-import { hexToRgbaStr } from '../../engine/palettes';
-import { formatNoteName } from '../../engine/chords';
+import { ModelDrawContext, ModeModule } from '../../../types';
+import { hexToRgbaStr } from '../../../engine/palettes';
+import { formatNoteName } from '../../../engine/chords';
 
 /**
  * Chromatic Aureola Halo Visual Model
@@ -194,3 +194,5 @@ export function drawAureolaModel(ctx: CanvasRenderingContext2D, context: ModelDr
 
   ctx.restore();
 }
+
+export default { draw: drawAureolaModel } satisfies ModeModule;

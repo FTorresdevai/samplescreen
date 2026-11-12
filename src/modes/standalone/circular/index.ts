@@ -1,7 +1,7 @@
-import { ModelDrawContext } from '../../types';
-import { hexToRgbaStr } from '../../engine/palettes';
-import { formatNoteName } from '../../engine/chords';
-import { roundRect } from '../../shared/canvas-utils';
+import { ModelDrawContext, ModeModule } from '../../../types';
+import { hexToRgbaStr } from '../../../engine/palettes';
+import { formatNoteName } from '../../../engine/chords';
+import { roundRect } from '../../../shared/canvas-utils';
 
 export function drawCircularModel(ctx: CanvasRenderingContext2D, context: ModelDrawContext) {
   const { region, loopTime, duration, midi, analysis, settings, isWaveformMode } = context;
@@ -143,3 +143,5 @@ export function drawCircularModel(ctx: CanvasRenderingContext2D, context: ModelD
 
   ctx.restore();
 }
+
+export default { draw: drawCircularModel } satisfies ModeModule;

@@ -24,15 +24,7 @@ export interface ColorPalette {
   glowColor: string;
 }
 
-export type BuiltinVisualModel =
-  | 'linear'
-  | 'circular'
-  | 'take-care'
-  | 'tz-lado-mau'
-  | 'orbital-moon'
-  | 'aureola';
-
-export type ActiveVisualModel = BuiltinVisualModel | (string & {});
+export type SynthTheme = 'crimson' | 'gold';
 
 export type ChordDisplay = 'bottom' | 'piano' | 'off'; // 'piano' = under album keyboard
 
@@ -64,7 +56,7 @@ export interface VisualizerSettings {
   fitReelsSafeZone: boolean;
 
   // Active Visual Model Theme
-  centerVisualizerMode: ActiveVisualModel;
+  modeId: string;            // id of a folder under src/modes/{standalone,albums}/
   loopBars: number;
   noteNameTags: boolean;     // Note name tags next to the cursor/playhead (e.g. C5, D4, F3, A#2)
   showProgressDashes: boolean; // Show bar progress dashes below notes
@@ -135,13 +127,24 @@ export interface ModelDrawContext {
   isWaveformMode: boolean;
 }
 
-export interface VisualModelManifest {
-  id: ActiveVisualModel;
+/** Default export of src/modes/<kind>/<id>/manifest.ts (loaded eagerly). */
+export interface ModeManifest {
+  id: string;                  // must equal the folder name
   name: string;
-  category: 'album' | 'daw' | 'creative';
+  kind: 'standalone' | 'album';
+  input: 'midi' | 'audio';
   description: string;
-  tag: string;
-  author?: string;
+  hardware?: string;           // forces this hardware id (ignores settings.synthModel)
+  palette?: Pick<VisualizerSettings, 'notesColor' | 'circleColor' | 'bgColor' | 'accentColor' | 'glowColor'>;
+  synthTheme?: SynthTheme;     // default 'crimson'
+  defaults?: Partial<Pick<VisualizerSettings, 'title' | 'bpm' | 'key' | 'synthModel'>>; // applied on first load only
+}
+
+export type ModelDrawFn = (ctx: CanvasRenderingContext2D, context: ModelDrawContext) => void;
+
+/** Default export of src/modes/<kind>/<id>/index.ts (loaded lazily). */
+export interface ModeModule {
+  draw: ModelDrawFn;
 }
 
 export interface SynthRegion {
@@ -158,7 +161,11 @@ export interface SynthDrawContext {
   activeNotes: MidiNote[];
   analysis: AudioAnalysis;
   settings: VisualizerSettings;
-  colorTheme?: 'crimson' | 'gold';
+  theme: SynthTheme;
+}
+
+export interface HardwareModule {
+  draw: (ctx: CanvasRenderingContext2D, context: SynthDrawContext) => void;
 }
 
 export interface SynthManifest {

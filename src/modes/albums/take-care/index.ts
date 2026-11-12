@@ -1,8 +1,8 @@
-import { ModelDrawContext } from '../../types';
-import { formatNoteName, detectChord } from '../../engine/chords';
-import { hexToRgbaStr } from '../../engine/palettes';
-import { roundRect } from '../../shared/canvas-utils';
-import { getCachedImage } from '../../shared/assets';
+import { ModelDrawContext, ModeModule } from '../../../types';
+import { formatNoteName, detectChord } from '../../../engine/chords';
+import { hexToRgbaStr } from '../../../engine/palettes';
+import { roundRect } from '../../../shared/canvas-utils';
+import { getCachedImage } from '../../../shared/assets';
 
 /**
  * Mode: "Take Care" • OVO Baroque Salon & Vintage Grand Piano Lounge
@@ -775,3 +775,5 @@ function drawLiquidGoldWaveform(
 
   ctx.restore();
 }
+
+export default { draw: drawTakeCareModel } satisfies ModeModule;

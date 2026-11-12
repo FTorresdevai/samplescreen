@@ -1,0 +1,29 @@
+import { ModeManifest, ModeModule } from '../types';
+
+/**
+ * Plug-and-play discovery: every folder src/modes/<kind>/<id>/ with a
+ * manifest.ts + index.ts is a mode. Manifests load eagerly (tiny metadata);
+ * draw code loads on demand as its own chunk.
+ */
+const manifests = import.meta.glob<{ default: ModeManifest }>('./*/*/manifest.ts', { eager: true });
+const loaders = import.meta.glob<{ default: ModeModule }>('./*/*/index.ts');
+
+export const FALLBACK_MODE_ID = 'linear';  // unknown id → linear
+export const DEFAULT_MODE_ID = 'take-care'; // mode shown on first load
+
+export const MODE_MANIFESTS: ModeManifest[] = Object.values(manifests).map(m => m.default);
+
+export function findManifest(id: string | null | undefined): ModeManifest | undefined {
+  return MODE_MANIFESTS.find(m => m.id === id);
+}
+
+export function getManifest(id: string | null | undefined): ModeManifest {
+  return findManifest(id) ?? findManifest(FALLBACK_MODE_ID)!;
+}
+
+export async function loadMode(id: string): Promise<ModeModule> {
+  const id_ = getManifest(id).id;
+  const entry = Object.entries(loaders).find(([path]) => path.endsWith(`/${id_}/index.ts`));
+  if (!entry) throw new Error(`[modes] No index.ts for mode "${id_}"`);
+  return (await entry[1]()).default;
+}

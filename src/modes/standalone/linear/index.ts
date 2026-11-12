@@ -1,8 +1,8 @@
-import { ModelDrawContext } from '../../types';
-import { formatNoteName } from '../../engine/chords';
-import { hexToRgbaStr } from '../../engine/palettes';
-import { drawMirroredSpectrumBars, drawOscilloscopeBeam } from '../../shared/waveform-engine';
-import { roundRect } from '../../shared/canvas-utils';
+import { ModelDrawContext, ModeModule } from '../../../types';
+import { formatNoteName } from '../../../engine/chords';
+import { hexToRgbaStr } from '../../../engine/palettes';
+import { drawMirroredSpectrumBars, drawOscilloscopeBeam } from '../../../shared/waveform-engine';
+import { roundRect } from '../../../shared/canvas-utils';
 
 export function drawLinearModel(ctx: CanvasRenderingContext2D, context: ModelDrawContext) {
   const { region, loopTime, duration, midi, activeNotes, analysis, settings, isWaveformMode } = context;
@@ -155,3 +155,5 @@ export function drawLinearModel(ctx: CanvasRenderingContext2D, context: ModelDra
 
   ctx.restore();
 }
+
+export default { draw: drawLinearModel } satisfies ModeModule;

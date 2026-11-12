@@ -1,104 +1,30 @@
-import { SynthDrawContext, SynthManifest } from '../types';
-import { drawST909Synthesizer } from './st909-synth';
-import { drawWingUprightSynth } from './wing-upright-synth';
-import { drawAnalogHardwareSynthesizer } from './analog-synth';
-import { drawUheDivaSynthesizer } from './diva-synth';
-import { drawStudioTapeMachine } from './tape-machine';
-
-export type SynthDrawFn = (ctx: CanvasRenderingContext2D, context: SynthDrawContext) => void;
+import { HardwareModule, SynthManifest } from '../types';
 
 /**
- * Standard Adapter for ST 909 Analog Synthesizer (Flagship).
- * Delivers 100% pixel-perfect rendering to the main console.
+ * Lazy hardware loaders: each synth is its own chunk and loads only when used.
+ * Adapters map the shared SynthDrawContext onto each renderer's signature.
  */
-export const drawST909Adapter: SynthDrawFn = (ctx, context) => {
-  const { region, currentTime, midi, activeNotes, analysis, settings, colorTheme } = context;
-  drawST909Synthesizer(
-    ctx,
-    region.x,
-    region.y,
-    region.width,
-    region.height,
-    currentTime,
-    midi,
-    activeNotes,
-    analysis,
-    settings,
-    colorTheme ?? (settings.centerVisualizerMode === 'take-care' ? 'gold' : 'crimson')
-  );
-};
-
-export const drawWingUprightAdapter: SynthDrawFn = (ctx, context) => {
-  const { region, currentTime, midi, activeNotes, analysis, settings } = context;
-  drawWingUprightSynth(
-    ctx,
-    region.x,
-    region.y,
-    region.width,
-    region.height,
-    currentTime,
-    midi,
-    activeNotes,
-    analysis,
-    settings
-  );
-};
-
-export const drawAnalogSynthAdapter: SynthDrawFn = (ctx, context) => {
-  const { region, currentTime, midi, activeNotes, analysis, settings } = context;
-  drawAnalogHardwareSynthesizer(
-    ctx,
-    region.x,
-    region.y,
-    region.width,
-    region.height,
-    currentTime,
-    midi,
-    activeNotes,
-    analysis,
-    settings
-  );
-};
-
-export const drawDivaSynthAdapter: SynthDrawFn = (ctx, context) => {
-  const { region, currentTime, midi, activeNotes, analysis, settings } = context;
-  drawUheDivaSynthesizer(
-    ctx,
-    region.x,
-    region.y,
-    region.width,
-    region.height,
-    currentTime,
-    midi,
-    activeNotes,
-    analysis,
-    settings
-  );
-};
-
-export const drawTapeMachineAdapter: SynthDrawFn = (ctx, context) => {
-  const { region, settings, colorTheme, currentTime, analysis } = context;
-  drawStudioTapeMachine(
-    ctx,
-    region.x,
-    region.y,
-    region.width,
-    region.height,
-    colorTheme ?? (settings.centerVisualizerMode === 'take-care' ? 'gold' : 'crimson'),
-    {
-      currentTime,
-      analysis,
-      bpm: settings.bpm,
-    }
-  );
-};
-
-export const SYNTH_REGISTRY: Record<string, SynthDrawFn> = {
-  'st909': drawST909Adapter,
-  'tape-machine': drawTapeMachineAdapter,
-  'wing-upright': drawWingUprightAdapter,
-  'analog-synth': drawAnalogSynthAdapter,
-  'diva-synth': drawDivaSynthAdapter,
+export const HARDWARE_LOADERS: Record<string, () => Promise<HardwareModule>> = {
+  'st909': () => import('./st909-synth').then(m => ({
+    draw: (ctx, { region: r, currentTime, midi, activeNotes, analysis, settings, theme }) =>
+      m.drawST909Synthesizer(ctx, r.x, r.y, r.width, r.height, currentTime, midi, activeNotes, analysis, settings, theme),
+  })),
+  'tape-machine': () => import('./tape-machine').then(m => ({
+    draw: (ctx, { region: r, currentTime, analysis, settings, theme }) =>
+      m.drawStudioTapeMachine(ctx, r.x, r.y, r.width, r.height, theme, { currentTime, analysis, bpm: settings.bpm }),
+  })),
+  'wing-upright': () => import('./wing-upright-synth').then(m => ({
+    draw: (ctx, { region: r, currentTime, midi, activeNotes, analysis, settings }) =>
+      m.drawWingUprightSynth(ctx, r.x, r.y, r.width, r.height, currentTime, midi, activeNotes, analysis, settings),
+  })),
+  'analog-synth': () => import('./analog-synth').then(m => ({
+    draw: (ctx, { region: r, currentTime, midi, activeNotes, analysis, settings }) =>
+      m.drawAnalogHardwareSynthesizer(ctx, r.x, r.y, r.width, r.height, currentTime, midi, activeNotes, analysis, settings),
+  })),
+  'diva-synth': () => import('./diva-synth').then(m => ({
+    draw: (ctx, { region: r, currentTime, midi, activeNotes, analysis, settings }) =>
+      m.drawUheDivaSynthesizer(ctx, r.x, r.y, r.width, r.height, currentTime, midi, activeNotes, analysis, settings),
+  })),
 };
 
 export const SYNTHS_MANIFEST: SynthManifest[] = [
@@ -134,9 +60,6 @@ export const SYNTHS_MANIFEST: SynthManifest[] = [
   },
 ];
 
-export function getSynthRenderer(id?: string): SynthDrawFn {
-  if (id && SYNTH_REGISTRY[id]) {
-    return SYNTH_REGISTRY[id];
-  }
-  return drawST909Adapter;
+export function loadHardware(id: string): Promise<HardwareModule> {
+  return (HARDWARE_LOADERS[id] ?? HARDWARE_LOADERS['st909'])();
 }

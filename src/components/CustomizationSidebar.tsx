@@ -23,7 +23,8 @@ import {
 } from 'lucide-react';
 import { VisualizerSettings, ParsedMidi, ChordDisplay } from '../types';
 import { PALETTES } from '../engine/palettes';
-import { VISUAL_MODELS_MANIFEST } from '../models/registry';
+import { MODE_MANIFESTS, findManifest } from '../modes/registry';
+import { applyMode } from '../core/mode-resolution';
 
 interface CustomizationSidebarProps {
   settings: VisualizerSettings;
@@ -416,61 +417,19 @@ export const CustomizationSidebar: React.FC<CustomizationSidebarProps> = ({
         <section className="space-y-2.5">
           <div className="flex items-center justify-between text-[10px] font-mono font-bold tracking-widest text-zinc-400 uppercase">
             <span>VISUAL MODELS</span>
-            <span className="text-amber-400 font-bold">{VISUAL_MODELS_MANIFEST.length} MODELS</span>
+            <span className="text-amber-400 font-bold">{MODE_MANIFESTS.length} MODELS</span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 bg-[#0c0e14] p-1.5 rounded-xl border border-white/[0.06]">
-            {VISUAL_MODELS_MANIFEST.map(model => {
-              const isSelected = settings.centerVisualizerMode === model.id;
+            {MODE_MANIFESTS.map(model => {
+              const isSelected = settings.modeId === model.id;
               return (
                 <button
                   key={model.id}
                   onClick={() => {
                     // 'Under keys' only exists in albums; fall back to the bottom bar elsewhere
-                    const chordFix = model.category !== 'album' && settings.chordDisplay === 'piano' ? { chordDisplay: 'bottom' as const } : {};
-                    if (model.id === 'take-care') {
-                      onUpdate({
-                        ...chordFix,
-                        centerVisualizerMode: 'take-care',
-                        notesColor: '#eab308',
-                        circleColor: '#382014',
-                        bgColor: '#150d09',
-                        accentColor: '#fde047',
-                        glowColor: '#b45309',
-                      });
-                    } else if (model.id === 'tz-lado-mau') {
-                      onUpdate({
-                        ...chordFix,
-                        centerVisualizerMode: 'tz-lado-mau',
-                        notesColor: '#ff5500',
-                        circleColor: '#2b1206',
-                        bgColor: '#080402',
-                        accentColor: '#ff8800',
-                        glowColor: '#ff3b00',
-                      });
-                    } else if (model.id === 'aureola') {
-                      onUpdate({
-                        ...chordFix,
-                        centerVisualizerMode: 'aureola',
-                        notesColor: '#f43f5e',
-                        circleColor: '#3b1c4e',
-                        bgColor: '#170f24',
-                        accentColor: '#fde047',
-                        glowColor: '#ec4899',
-                      });
-                    } else if (model.id === 'orbital-moon') {
-                      onUpdate({
-                        ...chordFix,
-                        centerVisualizerMode: 'orbital-moon',
-                        notesColor: '#e0e7ff',
-                        circleColor: '#25254a',
-                        bgColor: '#0f1026',
-                        accentColor: '#818cf8',
-                        glowColor: '#6366f1',
-                      });
-                    } else {
-                      onUpdate({ ...chordFix, centerVisualizerMode: model.id });
-                    }
+                    const chordFix = model.kind !== 'album' && settings.chordDisplay === 'piano' ? { chordDisplay: 'bottom' as const } : {};
+                    onUpdate({ ...applyMode(model), ...chordFix });
                   }}
                   className={`p-2 rounded-lg text-left transition flex flex-col justify-between ${
                     isSelected
@@ -478,11 +437,6 @@ export const CustomizationSidebar: React.FC<CustomizationSidebarProps> = ({
                       : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50 border border-transparent'
                   }`}
                 >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[8px] font-mono font-black uppercase px-1 py-0.2 rounded bg-white/[0.08] text-amber-300">
-                      {model.tag}
-                    </span>
-                  </div>
                   <span className="font-mono text-[11px] font-bold text-white line-clamp-1">
                     {model.name}
                   </span>
@@ -549,7 +503,7 @@ export const CustomizationSidebar: React.FC<CustomizationSidebarProps> = ({
 
           {/* Chord display: bottom bar, under album keyboard, or off */}
           {(() => {
-            const isAlbum = VISUAL_MODELS_MANIFEST.find(m => m.id === settings.centerVisualizerMode)?.category === 'album';
+            const isAlbum = findManifest(settings.modeId)?.kind === 'album';
             const options: { value: ChordDisplay; label: string; title: string }[] = [
               { value: 'bottom', label: 'Bottom', title: 'Show notes in the bottom bar' },
               ...(isAlbum ? [{ value: 'piano' as const, label: 'Under keys', title: 'Show notes under the album keyboard' }] : []),

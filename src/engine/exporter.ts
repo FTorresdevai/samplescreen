@@ -1,5 +1,6 @@
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
 import { CanvasRenderer } from './renderer';
+import { loadRenderModules, RenderModules } from './modules';
 import { AudioManager } from './audio';
 import { ParsedMidi, VisualizerSettings } from '../types';
 import { buildUnifiedTimelineMidi, TimelineTiming } from './midi';
@@ -41,6 +42,7 @@ async function resampleAudioBuffer(
 
 export class VideoExporter {
   private isCancelled = false;
+  private renderModules: RenderModules | null = null;
 
   public cancel() {
     this.isCancelled = true;
@@ -63,6 +65,14 @@ export class VideoExporter {
     const mainDuration = mainLoopDuration * (settings.exportLoops || 1);
     const duration = introDuration + mainDuration;
     const totalFrames = Math.floor(duration * fps);
+
+    // Load the mode + hardware chunks and the canvas fonts before frame 0,
+    // so every exported frame is drawn complete and with the right typeface.
+    this.renderModules = await loadRenderModules(settings, unifiedMidi.notes.length > 0);
+    await Promise.all([
+      document.fonts.load('900 44px Inter'),
+      document.fonts.load('800 17px "JetBrains Mono"'),
+    ]).catch(() => undefined); // a missing font must not block the export
 
     // Pre-slice and render the exact, cut-to-size AudioBuffer for the exported video
     const exportAudioBuffer = audioManager.prepareExportAudioBuffer(timing, settings, introMidi || null, midi);
@@ -355,7 +365,7 @@ export class VideoExporter {
 
         // Render exact deterministic frame with seamless unified timeline and intro awareness
         const { timingInfo } = calculateFrameProgress(currentTime, timing, exportCleanSettings, unifiedMidi);
-        renderer.render(currentTime, unifiedMidi, analysis, exportCleanSettings, timingInfo);
+        renderer.render(currentTime, unifiedMidi, analysis, exportCleanSettings, this.renderModules, timingInfo);
 
         // Create video frame directly from canvas
         const timestampMicros = Math.round(frameIndex * frameDurationMicros);
@@ -599,7 +609,7 @@ export class VideoExporter {
         try {
           const analysis = audioManager.getOfflineAnalysis(elapsed, audioBuffer);
           const { timingInfo } = calculateFrameProgress(elapsed, timing, exportCleanSettings, unifiedMidi);
-          renderer.render(elapsed, unifiedMidi, analysis, exportCleanSettings, timingInfo);
+          renderer.render(elapsed, unifiedMidi, analysis, exportCleanSettings, this.renderModules, timingInfo);
 
           const curFrame = Math.min(totalFrames, Math.round(elapsed * 60));
           onProgress({

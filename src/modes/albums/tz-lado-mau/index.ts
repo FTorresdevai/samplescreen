@@ -1,8 +1,8 @@
-import { ModelDrawContext } from '../../types';
-import { formatNoteName, detectChord } from '../../engine/chords';
-import { hexToRgbaStr } from '../../engine/palettes';
-import { roundRect } from '../../shared/canvas-utils';
-import { getCachedImage } from '../../shared/assets';
+import { ModelDrawContext, ModeModule } from '../../../types';
+import { formatNoteName, detectChord } from '../../../engine/chords';
+import { hexToRgbaStr } from '../../../engine/palettes';
+import { roundRect } from '../../../shared/canvas-utils';
+import { getCachedImage } from '../../../shared/assets';
 
 /**
  * Mode: Tz da Coronel "Lado Mau" • Inferno Trap Piano Suite
@@ -710,3 +710,5 @@ function drawSeismicMagmaWaveform(
 
   ctx.restore();
 }
+
+export default { draw: drawTzLadoMauModel } satisfies ModeModule;
