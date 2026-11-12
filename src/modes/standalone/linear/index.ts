@@ -1,11 +1,23 @@
-import { ModelDrawContext, ModeModule } from '../../../types';
+import { ModelDrawContext, ModeModule, ParsedMidi } from '../../../types';
 import { formatNoteName } from '../../../engine/chords';
 import { hexToRgbaStr } from '../../../engine/palettes';
-import { drawMirroredSpectrumBars, drawOscilloscopeBeam } from '../../../shared/waveform-engine';
-import { roundRect } from '../../../shared/canvas-utils';
+
+// Pitch range per MIDI object, computed once instead of scanning every note each frame
+const rangeCache = new WeakMap<ParsedMidi, { minMidi: number; pitchSpan: number }>();
+function getPitchRange(midi: ParsedMidi) {
+  let range = rangeCache.get(midi);
+  if (!range) {
+    const notes = midi.notes || [];
+    const minMidi = notes.length > 0 ? Math.min(...notes.map(n => n.midi)) : 48;
+    const maxMidi = notes.length > 0 ? Math.max(...notes.map(n => n.midi)) : 72;
+    range = { minMidi, pitchSpan: Math.max(12, maxMidi - minMidi + 4) };
+    rangeCache.set(midi, range);
+  }
+  return range;
+}
 
 export function drawLinearModel(ctx: CanvasRenderingContext2D, context: ModelDrawContext) {
-  const { region, loopTime, duration, midi, activeNotes, analysis, settings } = context;
+  const { region, loopTime, duration, midi, settings } = context;
   const { x, y, width: w, height: h } = region;
 
   ctx.save();
@@ -26,9 +38,7 @@ export function drawLinearModel(ctx: CanvasRenderingContext2D, context: ModelDra
 
   // Pitch Range Mapping
   const allNotes = midi.notes || [];
-  const minMidi = allNotes.length > 0 ? Math.min(...allNotes.map(n => n.midi)) : 48;
-  const maxMidi = allNotes.length > 0 ? Math.max(...allNotes.map(n => n.midi)) : 72;
-  const pitchSpan = Math.max(12, maxMidi - minMidi + 4);
+  const { minMidi, pitchSpan } = getPitchRange(midi);
 
   // Time window
   const windowSecs = duration || 16;
@@ -66,6 +76,20 @@ export function drawLinearModel(ctx: CanvasRenderingContext2D, context: ModelDra
 
     ctx.fillRect(nx, ny, nw, nh);
     ctx.restore();
+
+    // Note name fixed inside the left edge of the active block, clipped to its width
+    if (isActive && settings.noteNameTags !== false && nw > 14) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(nx, ny, nw, nh);
+      ctx.clip();
+      ctx.font = `800 ${Math.min(11, Math.max(8, nh - 4))}px "JetBrains Mono", monospace`;
+      ctx.fillStyle = '#0a0502';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(formatNoteName(note.midi, settings.accidental, settings.middleC), nx + 4, ny + nh / 2);
+      ctx.restore();
+    }
   });
 
   // Vertical Playhead Needle
@@ -79,33 +103,6 @@ export function drawLinearModel(ctx: CanvasRenderingContext2D, context: ModelDra
   ctx.lineTo(playheadX, y + h);
   ctx.stroke();
   ctx.restore();
-
-  // Floating Note Name Tags next to the cursor/needle
-  if (settings.noteNameTags !== false && activeNotes && activeNotes.length > 0) {
-    activeNotes.forEach(note => {
-      const pitchNorm = (note.midi - minMidi) / pitchSpan;
-      const tagY = y + h - 30 - pitchNorm * (h - 60);
-      const noteName = formatNoteName(note.midi, settings.accidental, settings.middleC);
-
-      ctx.save();
-      ctx.font = '800 11px "JetBrains Mono", monospace';
-      const tm = ctx.measureText(noteName);
-      const tagW = tm.width + 10;
-      const tagH = 18;
-      const tagX = playheadX + 8;
-
-      ctx.fillStyle = '#fde047';
-      ctx.shadowColor = '#f59e0b';
-      ctx.shadowBlur = 8;
-      roundRect(ctx, tagX, tagY - tagH / 2, tagW, tagH, 3.5, true, false);
-
-      ctx.fillStyle = '#0a0502';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(noteName, tagX + tagW / 2, tagY);
-      ctx.restore();
-    });
-  }
 
   ctx.restore();
 }

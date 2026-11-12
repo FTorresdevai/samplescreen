@@ -19,16 +19,6 @@ export function drawCircularModel(ctx: CanvasRenderingContext2D, context: ModelD
   ctx.arc(cx, cy, radius, 0, Math.PI * 2);
   ctx.stroke();
 
-  // Concentric Pitch Rings
-  const rings = [radius * 0.45, radius * 0.65, radius * 0.85];
-  rings.forEach(r => {
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.stroke();
-  });
-
   // ==========================================
   // CIRCULAR PIANO ROLL (MIDI NOTES)
   // ==========================================

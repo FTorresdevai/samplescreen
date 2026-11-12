@@ -19,18 +19,6 @@ export function drawOrbitalMoonModel(ctx: CanvasRenderingContext2D, context: Mod
   ctx.translate(cx, cy);
   ctx.rotate(-0.35); // tilt
 
-  // Orbit Guide Lines
-  ctx.strokeStyle = hexToRgbaStr(settings.accentColor || '#fde047', 0.25);
-  ctx.lineWidth = 1.2;
-  ctx.beginPath();
-  ctx.ellipse(0, 0, ringA, ringB, 0, 0, Math.PI * 2);
-  ctx.stroke();
-
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-  ctx.beginPath();
-  ctx.ellipse(0, 0, ringA * 0.7, ringB * 0.7, 0, 0, Math.PI * 2);
-  ctx.stroke();
-
   // ==========================================
   // ORBITAL MIDI BELTS
   // ==========================================
