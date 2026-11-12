@@ -24,7 +24,6 @@ export const VISUAL_MODELS_MANIFEST: VisualModelManifest[] = [
     category: 'album',
     description: 'OVO baroque salon, 40s vintage Toronto piano, and liquid gold waterfall.',
     tag: 'OFFICIAL ALBUM',
-    hasCustomTheme: true,
   },
   {
     id: 'tz-lado-mau',
@@ -32,7 +31,6 @@ export const VISUAL_MODELS_MANIFEST: VisualModelManifest[] = [
     category: 'album',
     description: 'Volcanic trap & drill aesthetics with sonic magma and dark inferno piano.',
     tag: 'OFFICIAL ALBUM',
-    hasCustomTheme: true,
   },
   {
     id: 'aureola',

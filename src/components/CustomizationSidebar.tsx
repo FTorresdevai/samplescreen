@@ -604,21 +604,6 @@ export const CustomizationSidebar: React.FC<CustomizationSidebarProps> = ({
 
           {/* Checkboxes matching reference */}
           <div className="space-y-2 pt-1">
-            {settings.centerVisualizerMode === 'linear' && (
-              <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={settings.showMidiNotesInRoll !== false}
-                  onChange={(e) => onUpdate({ showMidiNotesInRoll: e.target.checked })}
-                  className="w-4 h-4 rounded bg-zinc-900 border-zinc-700 text-amber-500 focus:ring-0 accent-amber-500 cursor-pointer"
-                />
-                <div className="flex flex-col">
-                  <span className="text-xs text-zinc-300">Show notes in piano roll</span>
-                  <span className="text-[10px] text-zinc-500">Uncheck to see only the laser line and active notes below</span>
-                </div>
-              </label>
-            )}
-
             <label className="flex items-center gap-2.5 cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -638,18 +623,6 @@ export const CustomizationSidebar: React.FC<CustomizationSidebarProps> = ({
               />
               <span className="text-xs text-zinc-300">Note name tags next to the cursor</span>
             </label>
-
-            {(settings.centerVisualizerMode === 'circular' || settings.centerVisualizerMode === 'orbital-moon' || settings.centerVisualizerMode === 'aureola') && (
-              <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={settings.drawNotesOnRings !== false}
-                  onChange={(e) => onUpdate({ drawNotesOnRings: e.target.checked })}
-                  className="w-4 h-4 rounded bg-zinc-900 border-zinc-700 text-amber-500 focus:ring-0 accent-amber-500 cursor-pointer"
-                />
-                <span className="text-xs text-zinc-300">Draw notes on the rings (circular / orbital view)</span>
-              </label>
-            )}
 
             <label className="flex items-center gap-2.5 cursor-pointer select-none">
               <input
@@ -694,57 +667,6 @@ export const CustomizationSidebar: React.FC<CustomizationSidebarProps> = ({
             ))}
           </div>
 
-          {/* Quick Studio Ambience Lighting: Ultra-Bright Studio vs Dark Studio Night */}
-          <div className="space-y-1.5 pt-1 pb-1">
-            <span className="text-[10px] font-mono text-zinc-400 block">STUDIO THEME:</span>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => onUpdate({
-                  isLightStudioMode: true,
-                  bgColor: '#ffffff',
-                  notesColor: '#ef4444',
-                  circleColor: '#cbd5e1',
-                  accentColor: '#f59e0b',
-                  glowColor: '#fed7aa',
-                  backgroundGlow: true,
-                  glowIntensity: 1.5,
-                })}
-                className={`py-1.5 px-2 rounded-lg text-[11px] font-mono font-bold transition flex items-center justify-center gap-1.5 ${
-                  settings.isLightStudioMode
-                    ? 'bg-amber-400 text-black border border-amber-300 shadow-md font-black'
-                    : 'bg-zinc-800 text-zinc-300 hover:text-white border border-white/[0.08]'
-                }`}
-                title="Ultra-Bright Light Studio Mode (White & Wood, LoopVisualizer)"
-              >
-                <span>☀</span>
-                <span>Ultra-Bright Light Mode</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onUpdate({
-                  isLightStudioMode: false,
-                  bgColor: '#161310',
-                  notesColor: '#f59e0b',
-                  circleColor: '#2b231c',
-                  accentColor: '#fde047',
-                  glowColor: '#f59e0b',
-                  backgroundGlow: true,
-                  glowIntensity: 1.3,
-                })}
-                className={`py-1.5 px-2 rounded-lg text-[11px] font-mono font-bold transition flex items-center justify-center gap-1.5 ${
-                  !settings.isLightStudioMode
-                    ? 'bg-zinc-700 text-white border border-white/20 shadow-sm font-bold'
-                    : 'bg-zinc-900 text-zinc-400 hover:text-white border border-white/[0.08]'
-                }`}
-                title="Dark Studio Night Mode (Dark & Cozy)"
-              >
-                <span>☾</span>
-                <span>Dark Night Mode</span>
-              </button>
-            </div>
-          </div>
-
           {/* Granular Color Elements */}
           <div className="space-y-2 pt-1">
             <div className="flex items-center justify-between">
@@ -776,42 +698,6 @@ export const CustomizationSidebar: React.FC<CustomizationSidebarProps> = ({
                 className="w-4 h-4 rounded bg-zinc-900 border-zinc-700 text-amber-500 focus:ring-0 accent-amber-500 cursor-pointer"
               />
             </label>
-          </div>
-
-          {/* Style dropdown */}
-          <div className="space-y-1 pt-1">
-            <label className="text-xs text-zinc-400">Style</label>
-            <div className="w-full bg-[#0c0e14] border border-white/[0.06] rounded-lg px-3 py-2 text-xs font-mono font-medium text-white flex items-center justify-between">
-              <span>Synthesizer (ST 909)</span>
-              <span className="text-[10px] text-zinc-500 font-mono">ANALOG</span>
-            </div>
-          </div>
-
-          {/* Background: Paper / Night */}
-          <div className="space-y-1.5 pt-1">
-            <label className="text-xs text-zinc-400">Background</label>
-            <div className="grid grid-cols-2 gap-1.5 bg-[#0c0e14] p-1 rounded-xl border border-white/[0.06]">
-              <button
-                onClick={() => onUpdate({ bgColor: '#f4f3ef', circleColor: '#27272a' })}
-                className={`py-1.5 rounded-lg font-mono text-xs font-semibold transition ${
-                  settings.bgColor === '#f4f3ef'
-                    ? 'bg-zinc-800 text-white shadow-sm'
-                    : 'text-zinc-500 hover:text-zinc-300'
-                }`}
-              >
-                Paper
-              </button>
-              <button
-                onClick={() => onUpdate({ bgColor: '#060709', circleColor: '#161922' })}
-                className={`py-1.5 rounded-lg font-mono text-xs font-semibold transition ${
-                  settings.bgColor !== '#f4f3ef'
-                    ? 'bg-zinc-800 text-white shadow-sm'
-                    : 'text-zinc-500 hover:text-zinc-300'
-                }`}
-              >
-                Night
-              </button>
-            </div>
           </div>
 
           {/* Dynamic Loop Duration (Bars) with MIDI & Audio automatic detection */}
@@ -873,32 +759,6 @@ export const CustomizationSidebar: React.FC<CustomizationSidebarProps> = ({
             );
           })()}
 
-          {/* Motion: Page / Continuous */}
-          <div className="space-y-1.5 pt-1">
-            <label className="text-xs text-zinc-400">Motion</label>
-            <div className="grid grid-cols-2 gap-1.5 bg-[#0c0e14] p-1 rounded-xl border border-white/[0.06]">
-              <button
-                onClick={() => onUpdate({ motionMode: 'page' })}
-                className={`py-1.5 rounded-lg font-mono text-xs font-semibold transition ${
-                  settings.motionMode === 'page'
-                    ? 'bg-zinc-800 text-white shadow-sm'
-                    : 'text-zinc-500 hover:text-zinc-300'
-                }`}
-              >
-                Page
-              </button>
-              <button
-                onClick={() => onUpdate({ motionMode: 'continuous' })}
-                className={`py-1.5 rounded-lg font-mono text-xs font-semibold transition ${
-                  settings.motionMode === 'continuous'
-                    ? 'bg-zinc-800 text-white shadow-sm'
-                    : 'text-zinc-500 hover:text-zinc-300'
-                }`}
-              >
-                Continuous
-              </button>
-            </div>
-          </div>
         </section>
 
         {/* ============================================================== */}

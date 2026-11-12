@@ -1,5 +1,5 @@
 import { AudioAnalysis, MidiNote, ParsedMidi, VisualizerSettings, TimingInfo, ModelRegion, ModelDrawContext, SynthRegion } from '../types';
-import { hexToRgb, hexToRgbaStr } from './palettes';
+import { hexToRgbaStr } from './palettes';
 import { formatNoteName, detectChord } from './chords';
 import { getModelRenderer } from '../models/registry';
 import { getSynthRenderer } from '../hardware/registry';
@@ -188,8 +188,6 @@ export class CanvasRenderer {
   ) {
     const { ctx } = this;
     ctx.save();
-    const bg = settings.bgColor || '#141018';
-    const rgb = hexToRgb(bg);
 
     const stageGrad = ctx.createLinearGradient(0, 0, 0, height);
     stageGrad.addColorStop(0, '#1c1008');

@@ -54,16 +54,11 @@ export interface VisualizerSettings {
   waveformMode: boolean;    // true = Soundwave / Oscilloscope / Spectrum (no piano); false = Piano Roll / Waterfall (with MIDI)
 
   // Layout & Style Features
-  showObiStrip: boolean;     // Authentic Japanese / Studio vertical label strip
-  showSynthConsole: boolean; // Top sleek keyboard & hardware console
   synthModel?: string;       // Active synthesizer hardware model ('st909', etc.)
-  showCenterOrb: boolean;    // Center audio reactor orb
   showChord: boolean;            // Show active note names & chord at the bottom of the screen (below visualizer)
   showChordBelowPiano: boolean;  // Show chord information directly below the piano keyboard
   chordDisplayLocation?: 'bottom' | 'top' | 'both' | 'hidden'; // Unified chord location selector
   showChordSymbol: boolean;      // Show detected chord symbol (e.g. Cm7)
-  showMidiNotesInRoll?: boolean; // Show/hide MIDI note blocks in linear roll (clean playhead mode)
-  isLightStudioMode?: boolean;   // Ultra-bright high-contrast studio mode
   showSafeZoneGuides: boolean; // Instagram Reels / TikTok overlay
   showPreviewHud?: boolean;    // Show/hide on-screen HUD buttons over preview (clean view)
   fitReelsSafeZone: boolean;
@@ -71,11 +66,8 @@ export interface VisualizerSettings {
   // Active Visual Model Theme
   centerVisualizerMode: ActiveVisualModel;
   loopBars: number;
-  motionMode: 'rotating-wheel' | 'continuous' | 'page';
-  drawNotesOnRings: boolean;
   noteNameTags: boolean;     // Note name tags next to the cursor/playhead (e.g. C5, D4, F3, A#2)
   showProgressDashes: boolean; // Show bar progress dashes below notes
-  audioVisualizerMode: 'piano-roll' | 'radial-waveform' | 'spectrum-grooves';
 
   // Harmony Settings
   accidental: 'sharp' | 'flat';
@@ -149,7 +141,6 @@ export interface VisualModelManifest {
   category: 'album' | 'daw' | 'creative';
   description: string;
   tag: string;
-  hasCustomTheme?: boolean;
   author?: string;
 }
 

@@ -28,7 +28,7 @@ export function drawWingUprightSynth(
     lastCacheKey = '';
   });
 
-  const cacheKey = `${w}_${h}_${wingPianoImg ? 'loaded' : 'pending'}_${settings.isLightStudioMode ? 'light' : 'dark'}`;
+  const cacheKey = `${w}_${h}_${wingPianoImg ? 'loaded' : 'pending'}`;
 
   // Build / update offscreen cache for static VST frame and photo
   if (!cachedCanvas || cachedCanvas.width !== w || cachedCanvas.height !== h || lastCacheKey !== cacheKey) {
