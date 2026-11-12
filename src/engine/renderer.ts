@@ -10,11 +10,12 @@ export class CanvasRenderer {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
 
-  constructor(canvas: HTMLCanvasElement) {
+  /** `readback: true` keeps the canvas in CPU memory (fast frame capture on Firefox). */
+  constructor(canvas: HTMLCanvasElement, readback = false) {
     this.canvas = canvas;
     this.canvas.width = 1080;
     this.canvas.height = 1920;
-    const context = canvas.getContext('2d', { alpha: false });
+    const context = canvas.getContext('2d', { alpha: false, willReadFrequently: readback });
     if (!context) throw new Error('Could not get 2D context');
     this.ctx = context;
   }
@@ -167,28 +168,63 @@ export class CanvasRenderer {
     const { ctx } = this;
     ctx.save();
 
-    const stageGrad = ctx.createLinearGradient(0, 0, 0, height);
-    stageGrad.addColorStop(0, '#1c1008');
-    stageGrad.addColorStop(0.35, '#100804');
-    stageGrad.addColorStop(0.7, '#070302');
-    stageGrad.addColorStop(1, '#020101');
-    ctx.fillStyle = stageGrad;
-    ctx.fillRect(0, 0, width, height);
+    // Both full-screen gradients are pre-rendered once and blitted each frame:
+    // computing them per pixel costs ~9 ms/frame on a CPU canvas (Firefox export).
+    ctx.drawImage(this.getStageLayer(width, height), 0, 0);
 
-    // Ambient reactive backlight glow
+    // Ambient reactive backlight glow. Every stop's alpha scales with centerAlpha,
+    // so drawing the full-alpha layer with globalAlpha = centerAlpha is identical.
     if (settings.backgroundGlow !== false) {
       const glowColor = settings.glowColor || settings.notesColor || '#f59e0b';
       const reactiveBass = analysis.bass * (settings.audioSensitivity || 1.2);
       const centerAlpha = Math.min(0.45, 0.20 + reactiveBass * 0.30);
 
-      const centerGrad = ctx.createRadialGradient(width / 2, 900, 60, width / 2, 900, 950);
-      centerGrad.addColorStop(0, hexToRgbaStr(glowColor, centerAlpha));
-      centerGrad.addColorStop(0.5, hexToRgbaStr(settings.accentColor || glowColor, centerAlpha * 0.4));
-      centerGrad.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = centerGrad;
-      ctx.fillRect(0, 0, width, height);
+      ctx.globalAlpha = centerAlpha;
+      ctx.drawImage(this.getGlowLayer(width, height, glowColor, settings.accentColor || glowColor), 0, 0);
     }
     ctx.restore();
+  }
+
+  private stageLayer: { key: string; canvas: HTMLCanvasElement } | null = null;
+  private glowLayer: { key: string; canvas: HTMLCanvasElement } | null = null;
+
+  private makeLayer(width: number, height: number, paint: (c: CanvasRenderingContext2D) => void): HTMLCanvasElement {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    paint(canvas.getContext('2d')!);
+    return canvas;
+  }
+
+  private getStageLayer(width: number, height: number): HTMLCanvasElement {
+    const key = `${width}x${height}`;
+    if (this.stageLayer?.key !== key) {
+      this.stageLayer = { key, canvas: this.makeLayer(width, height, c => {
+        const stageGrad = c.createLinearGradient(0, 0, 0, height);
+        stageGrad.addColorStop(0, '#1c1008');
+        stageGrad.addColorStop(0.35, '#100804');
+        stageGrad.addColorStop(0.7, '#070302');
+        stageGrad.addColorStop(1, '#020101');
+        c.fillStyle = stageGrad;
+        c.fillRect(0, 0, width, height);
+      }) };
+    }
+    return this.stageLayer.canvas;
+  }
+
+  private getGlowLayer(width: number, height: number, glowColor: string, accentColor: string): HTMLCanvasElement {
+    const key = `${width}x${height}|${glowColor}|${accentColor}`;
+    if (this.glowLayer?.key !== key) {
+      this.glowLayer = { key, canvas: this.makeLayer(width, height, c => {
+        const centerGrad = c.createRadialGradient(width / 2, 900, 60, width / 2, 900, 950);
+        centerGrad.addColorStop(0, hexToRgbaStr(glowColor, 1));
+        centerGrad.addColorStop(0.5, hexToRgbaStr(accentColor, 0.4));
+        centerGrad.addColorStop(1, 'rgba(0,0,0,0)');
+        c.fillStyle = centerGrad;
+        c.fillRect(0, 0, width, height);
+      }) };
+    }
+    return this.glowLayer.canvas;
   }
 
   private drawHeader(

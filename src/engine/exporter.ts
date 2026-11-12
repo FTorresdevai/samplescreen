@@ -40,9 +40,20 @@ async function resampleAudioBuffer(
   return await offlineCtx.startRendering();
 }
 
+/** Yield to the event loop without timer throttling (works in background tabs). */
+function yieldToBrowser(): Promise<void> {
+  return new Promise(resolve => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => resolve();
+    channel.port2.postMessage(null);
+  });
+}
+
 export class VideoExporter {
   private isCancelled = false;
   private renderModules: RenderModules | null = null;
+  // Export timing breakdown (ms), logged to the console when an export finishes
+  private perf = { start: 0, preload: 0, audio: 0, render: 0, encoderWait: 0, setup: 0, frameSubmit: 0, uiYield: 0, flush: 0, capture: 'gpu-canvas' };
 
   public cancel() {
     this.isCancelled = true;
@@ -66,6 +77,7 @@ export class VideoExporter {
     const duration = introDuration + mainDuration;
     const totalFrames = Math.floor(duration * fps);
 
+    this.perf = { start: performance.now(), preload: 0, audio: 0, render: 0, encoderWait: 0, setup: 0, frameSubmit: 0, uiYield: 0, flush: 0, capture: 'gpu-canvas' };
     // Load the mode + hardware chunks and the canvas fonts before frame 0,
     // so every exported frame is drawn complete and with the right typeface.
     this.renderModules = await loadRenderModules(settings, unifiedMidi.notes.length > 0);
@@ -73,6 +85,7 @@ export class VideoExporter {
       document.fonts.load('900 44px Inter'),
       document.fonts.load('800 17px "JetBrains Mono"'),
     ]).catch(() => undefined); // a missing font must not block the export
+    this.perf.preload = performance.now() - this.perf.start;
 
     // Pre-slice and render the exact, cut-to-size AudioBuffer for the exported video
     const exportAudioBuffer = audioManager.prepareExportAudioBuffer(timing, settings, introMidi || null, midi);
@@ -307,7 +320,9 @@ export class VideoExporter {
         });
 
         // Encode pre-cut audio buffer directly into AAC/Opus chunks matching exact video duration
+        const tAudio = performance.now();
         await this.encodeAudioBuffer(effectiveAudioBuffer, audioEncoder, targetAudioSampleRate);
+        this.perf.audio = performance.now() - tAudio;
         if (audioEncoderError) {
           throw audioEncoderError;
         }
@@ -342,6 +357,18 @@ export class VideoExporter {
 
       const activeVideoEncoder = videoEncoder;
 
+      this.perf.setup = performance.now() - this.perf.start;
+
+      // Frame capture strategy. `new VideoFrame(canvas)` is ~5 ms on Chrome but ~45 ms
+      // on Firefox, which reads the GPU canvas back synchronously. Probe the first
+      // frames and, if capture is slow, continue on a CPU-backed (willReadFrequently)
+      // canvas, where Firefox captures in ~1 ms. Frames are deterministic, so
+      // switching canvases mid-export does not change the output.
+      const PROBE_FIRST = 2;            // skip warm-up frames
+      const PROBE_LAST = 12;
+      const SLOW_CAPTURE_MS = 12;
+      let probeMs = 0;
+
       for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
         if (this.isCancelled) {
           throw new Error('Export cancelled by user');
@@ -351,6 +378,7 @@ export class VideoExporter {
         }
 
         // Safe non-blocking queue throttle: wait for encoder dequeue or small timeout
+        const tWait = performance.now();
         while (activeVideoEncoder.encodeQueueSize > 25) {
           if (this.isCancelled) throw new Error('Export cancelled by user');
           if (encoderError) throw encoderError;
@@ -360,12 +388,16 @@ export class VideoExporter {
           ]);
         }
 
+        const tRender = performance.now();
+        this.perf.encoderWait += tRender - tWait;
         const currentTime = frameIndex / fps;
         const analysis = audioManager.getOfflineAnalysis(currentTime, effectiveAudioBuffer);
 
         // Render exact deterministic frame with seamless unified timeline and intro awareness
         const { timingInfo } = calculateFrameProgress(currentTime, timing, exportCleanSettings, unifiedMidi);
         renderer.render(currentTime, unifiedMidi, analysis, exportCleanSettings, this.renderModules, timingInfo);
+        const tSubmit = performance.now();
+        this.perf.render += tSubmit - tRender;
 
         // Create video frame directly from canvas
         const timestampMicros = Math.round(frameIndex * frameDurationMicros);
@@ -377,6 +409,15 @@ export class VideoExporter {
         // Insert keyframe every 2 seconds (120 frames at 60fps)
         activeVideoEncoder.encode(videoFrame, { keyFrame: frameIndex % 120 === 0 });
         videoFrame.close();
+        const submitMs = performance.now() - tSubmit;
+        this.perf.frameSubmit += submitMs;
+
+        if (frameIndex >= PROBE_FIRST && frameIndex < PROBE_LAST) probeMs += submitMs;
+        if (frameIndex === PROBE_LAST - 1 && probeMs / (PROBE_LAST - PROBE_FIRST) > SLOW_CAPTURE_MS) {
+          canvas = document.createElement('canvas');
+          renderer = new CanvasRenderer(canvas, true);
+          this.perf.capture = 'cpu-canvas (switched after probe)';
+        }
 
         // Report progress periodically (every 4 frames gives smooth UI and lets GPU encode breathe)
         if (frameIndex % 4 === 0 || frameIndex === totalFrames - 1) {
@@ -396,7 +437,11 @@ export class VideoExporter {
           });
 
           // Yield to browser UI thread to prevent freezing
-          await new Promise((r) => setTimeout(r, 0));
+          // MessageChannel instead of setTimeout: browsers throttle timers in
+          // background tabs, which stretched exports to minutes when the tab was hidden.
+          const tYield = performance.now();
+          await yieldToBrowser();
+          this.perf.uiYield += performance.now() - tYield;
         }
       }
 
@@ -409,10 +454,30 @@ export class VideoExporter {
         status: 'Finalizing MP4 container...',
       });
 
+      const tFlush = performance.now();
       await activeVideoEncoder.flush();
+      this.perf.flush = performance.now() - tFlush;
       if (encoderError) throw encoderError;
 
       muxer.finalize();
+
+      const p = this.perf;
+      console.info('[SampleScreen] Export timing (s):', {
+        total: +((performance.now() - p.start) / 1000).toFixed(2),
+        preloadModulesAndFonts: +(p.preload / 1000).toFixed(2),
+        audioEncode: +(p.audio / 1000).toFixed(2),
+        renderFrames: +(p.render / 1000).toFixed(2),
+        waitForVideoEncoder: +(p.encoderWait / 1000).toFixed(2),
+        setupBeforeFrame0: +(p.setup / 1000).toFixed(2),
+        createAndSubmitFrames: +(p.frameSubmit / 1000).toFixed(2),
+        uiYields: +(p.uiYield / 1000).toFixed(2),
+        encoderFlush: +(p.flush / 1000).toFixed(2),
+        capture: p.capture,
+        browser: navigator.userAgent,
+        frames: totalFrames,
+        videoCodec: chosenCodec,
+        audioCodec: chosenAudioCodec,
+      });
 
       const buffer = target.buffer;
       return new Blob([buffer], { type: 'video/mp4' });
