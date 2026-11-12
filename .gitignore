@@ -43,3 +43,6 @@ security
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Obsidian vault config
+.obsidian/
