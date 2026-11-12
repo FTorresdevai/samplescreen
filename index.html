@@ -1,16 +1,277 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%23ef4444'/><rect x='40' y='30' width='8' height='40' rx='2' fill='%23ffffff'/><rect x='52' y='30' width='8' height='40' rx='2' fill='%23ffffff'/></svg>" />
+    <script>
+      // Old deep links (/?model=take-care) pointed at the app when it lived here.
+      if (new URLSearchParams(location.search).has('model') || location.hash === '#mockups') {
+        location.replace('app.html' + location.search + location.hash);
+      }
+    </script>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%23245847'/><rect x='40' y='30' width='8' height='40' rx='2' fill='%23f4f2ec'/><rect x='52' y='30' width='8' height='40' rx='2' fill='%23f4f2ec'/></svg>" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SampleScreen — Audio & MIDI Vertical Video Visualizer</title>
+    <title>SampleScreen | Audio & MIDI vertical visualizer for producers</title>
+    <meta name="description" content="Turn a sample and its MIDI into a 1080×1920, 60 FPS vertical video for Reels, TikTok and Shorts. Everything runs in your browser." />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700;800&family=Orbitron:wght@600;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/src/landing/landing.css" />
   </head>
-  <body class="bg-[#08090c] text-zinc-100 antialiased overflow-x-hidden selection:bg-red-500 selection:text-white">
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="nav" id="top">
+      <div class="wrap nav__row">
+        <a class="logo" href="#top">Sample<em>Screen</em></a>
+        <button class="nav__toggle" type="button" aria-expanded="false" aria-controls="menu">Menu</button>
+        <nav class="nav__menu" id="menu" aria-label="Main">
+          <a href="#looks">Looks</a>
+          <a href="#how">How it works</a>
+          <a href="#hardware">Hardware</a>
+          <a href="#faq">FAQ</a>
+          <a class="btn btn--small" href="app.html">Open the app <span aria-hidden="true">→</span></a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- HERO -->
+      <section class="hero wrap">
+        <div class="hero__copy">
+          <p class="pill"><span aria-hidden="true">✦</span> Vertical visualizer, made for producers &amp; beatmakers</p>
+          <h1>Turn your samples into <em>scroll-stopping</em> visuals for the feed.</h1>
+          <p class="lead">
+            Drop in a sample and its MIDI. SampleScreen draws the notes, the chords and a studio
+            console around them, then exports a finished vertical video for Reels, TikTok and Shorts.
+          </p>
+          <div class="hero__cta">
+            <a class="btn" href="app.html">Open the app <span aria-hidden="true">→</span></a>
+            <a class="link" href="#looks">See the looks <span aria-hidden="true">→</span></a>
+          </div>
+          <p class="fine">Runs in your browser · Your files stay on your computer<br />1080×1920 at 60 FPS · MP4 with sound</p>
+        </div>
+
+        <div class="hero__stage">
+          <p class="stage__tag">YOUR SAMPLE. / IN THE FEED.</p>
+          <span class="stage__word" aria-hidden="true">play</span>
+          <div class="phone">
+            <canvas id="hero-canvas" aria-label="Animated preview of a SampleScreen video" role="img"></canvas>
+          </div>
+          <div class="stage__ctrl">
+            <div>
+              <p class="mono"><span id="look-index">01</span> / 04</p>
+              <p class="stage__name" id="look-name">DAW Linear Roll</p>
+            </div>
+            <div class="stage__arrows">
+              <button type="button" id="look-prev" aria-label="Previous look">←</button>
+              <button type="button" id="look-next" aria-label="Next look">→</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- MARQUEE -->
+      <div class="marquee" aria-hidden="true">
+        <div class="marquee__track" id="marquee">
+          <span>1080×1920 AT 60 FPS</span><i>✦</i>
+          <span>AUDIO-REACTIVE + MIDI-DRIVEN</span><i>✦</i>
+          <span>STUDIO HARDWARE CONSOLES</span><i>✦</i>
+          <span>BPM-SNAPPED BEAT TRIMMER</span><i>✦</i>
+          <span>MADE FOR REELS, TIKTOK &amp; SHORTS</span><i>✦</i>
+          <span>CHORD &amp; KEY DETECTION</span><i>✦</i>
+          <span>RENDERED IN YOUR BROWSER</span><i>✦</i>
+        </div>
+      </div>
+
+      <!-- LOOKS -->
+      <section class="section wrap" id="looks">
+        <div class="section__head">
+          <div>
+            <p class="eyebrow">01 / The visual collection</p>
+            <h2>Pick a look.<br /><em>Make it yours.</em></h2>
+          </div>
+          <p class="lead">
+            Album-inspired scenes and clean standalone modes. Every one works with audio alone
+            or with audio and MIDI together. Open any of them straight in the app.
+          </p>
+        </div>
+
+        <div class="filters" role="group" aria-label="Filter looks">
+          <button type="button" class="chip is-on" data-filter="all">All</button>
+          <button type="button" class="chip" data-filter="album">Album scenes</button>
+          <button type="button" class="chip" data-filter="standalone">Standalone</button>
+        </div>
+
+        <div class="cards">
+          <a class="card" data-kind="album" href="app.html?model=take-care">
+            <div class="card__art"><img src="/src/modes/albums/take-care/assets/cover.jpg" alt="" loading="lazy" /></div>
+            <p class="card__meta"><span>01</span><span>Album scene</span></p>
+            <h3>Take Care</h3>
+            <p>Baroque salon, a 40s vintage piano and a liquid gold note waterfall.</p>
+          </a>
+          <a class="card" data-kind="album" href="app.html?model=tz-lado-mau">
+            <div class="card__art"><img src="/src/modes/albums/tz-lado-mau/assets/cover.jpg" alt="" loading="lazy" /></div>
+            <p class="card__meta"><span>02</span><span>Album scene</span></p>
+            <h3>Lado Mau</h3>
+            <p>Volcanic trap and drill mood, sonic magma and a dark inferno piano.</p>
+          </a>
+          <a class="card" data-kind="standalone" href="app.html?model=linear">
+            <div class="card__art"><canvas data-look="linear"></canvas></div>
+            <p class="card__meta"><span>03</span><span>Standalone</span></p>
+            <h3>DAW Linear Roll</h3>
+            <p>The classic horizontal piano roll, with grid, bar markers and a playhead.</p>
+          </a>
+          <a class="card" data-kind="standalone" href="app.html?model=circular">
+            <div class="card__art"><canvas data-look="circular"></canvas></div>
+            <p class="card__meta"><span>04</span><span>Standalone</span></p>
+            <h3>Polar Sequencer</h3>
+            <p>A 360° turntable. Notes sit on the record and a needle sweeps past them.</p>
+          </a>
+          <a class="card" data-kind="standalone" href="app.html?model=aureola">
+            <div class="card__art"><canvas data-look="aureola"></canvas></div>
+            <p class="card__meta"><span>05</span><span>Standalone</span></p>
+            <h3>Prismatic Aureole</h3>
+            <p>A solar halo with shockwaves on the kick and rings for every harmony.</p>
+          </a>
+          <a class="card" data-kind="standalone" href="app.html?model=orbital-moon">
+            <div class="card__art"><canvas data-look="orbital"></canvas></div>
+            <p class="card__meta"><span>06</span><span>Standalone</span></p>
+            <h3>3D Celestial Orbit</h3>
+            <p>A shaded moon with tilted rings. Your notes travel the orbits.</p>
+          </a>
+        </div>
+      </section>
+
+      <!-- HOW -->
+      <section class="section section--tint" id="how">
+        <div class="wrap">
+          <div class="section__head">
+            <div>
+              <p class="eyebrow">02 / Less editing. More posting.</p>
+              <h2>From sample to video,<br /><em>without opening a DAW.</em></h2>
+            </div>
+            <p class="lead">No video editor. No plugins. No render queue on someone else's server.</p>
+          </div>
+          <ol class="steps">
+            <li>
+              <span class="steps__n">01</span>
+              <h3>Drop in your sample.</h3>
+              <p>Add a WAV or MP3. Pair it with the MIDI file if you have one, and the BPM and key are picked up for you.</p>
+            </li>
+            <li>
+              <span class="steps__n">02</span>
+              <h3>Trim it to the bar.</h3>
+              <p>Choose a start bar and a 4, 8, 12 or 16 bar loop. The cut snaps to your BPM, and the original stays one click away.</p>
+            </li>
+            <li>
+              <span class="steps__n">03</span>
+              <h3>Export and post.</h3>
+              <p>Pick a look, a console and your colours. Export a 1080×1920, 60 FPS MP4 with the audio already in sync.</p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- HARDWARE -->
+      <section class="section section--night" id="hardware">
+        <div class="wrap">
+          <div class="section__head">
+            <div>
+              <p class="eyebrow">03 / The console slot</p>
+              <h2>Studio hardware,<br /><em>playing your notes.</em></h2>
+            </div>
+            <p class="lead">
+              The top of every video is a piece of gear. Keys light up with your MIDI,
+              VU meters follow the level, and tape reels turn at your tempo.
+            </p>
+          </div>
+          <div class="gear">
+            <figure class="gear__photo">
+              <img src="images/tape_machine.jpg" alt="Dual-reel master tape machine with VU meters" loading="lazy" />
+            </figure>
+            <ul class="gear__list">
+              <li><span class="tag">Analog master</span><h3>Tape Mark II Studio Deck</h3><p>Dual-reel master tape machine with backlit VU meters.</p></li>
+              <li><span class="tag">Flagship</span><h3>ST 909 Analogue Synthesizer</h3><p>Triple VCO console with a CRT oscilloscope and a lit 25-key keyboard.</p></li>
+              <li><span class="tag">Acoustic vintage</span><h3>Wing Upright Piano</h3><p>Vintage upright with carved walnut side cheeks.</p></li>
+              <li><span class="tag">Polyphonic</span><h3>Vintage Prophet Console</h3><p>70s polysynth with pitch and modulation wheels.</p></li>
+              <li><span class="tag">Virtual analog</span><h3>Diva Dual Rack</h3><p>Filter rack with a modular oscillator matrix.</p></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- FEATURES -->
+      <section class="section wrap">
+        <div class="section__head">
+          <div>
+            <p class="eyebrow">04 / Built for samples</p>
+            <h2>No MIDI? It follows the sound.<br /><em>Got MIDI? It shows every note.</em></h2>
+          </div>
+        </div>
+        <div class="features">
+          <article>
+            <h3>Two modes in every look</h3>
+            <p>With audio only you get waveforms and spectrum that move with bass, mids and highs. Add MIDI and the piano roll, note names and chords appear.</p>
+          </article>
+          <article>
+            <h3>Chords and key, on screen</h3>
+            <p>Active notes, the detected chord, BPM, key and a bar counter are part of the frame, so other producers can read what you played.</p>
+          </article>
+          <article>
+            <h3>Nothing leaves your computer</h3>
+            <p>Audio analysis, rendering and video encoding all happen in your browser. There is no upload and no cloud render.</p>
+          </article>
+        </div>
+      </section>
+
+      <!-- FAQ -->
+      <section class="section section--tint" id="faq">
+        <div class="wrap faq">
+          <div>
+            <p class="eyebrow">05 / Questions</p>
+            <h2>Good to <em>know.</em></h2>
+          </div>
+          <div class="faq__list">
+            <details>
+              <summary>Do I need a MIDI file?</summary>
+              <p>No. Every look has an audio-only mode that reacts to the sound. MIDI adds the piano roll, lit keys, note names and chord detection.</p>
+            </details>
+            <details>
+              <summary>Which files can I use?</summary>
+              <p>WAV or MP3 for the audio, and a standard MIDI file for the notes.</p>
+            </details>
+            <details>
+              <summary>Are my files uploaded anywhere?</summary>
+              <p>No. Everything is processed locally in your browser, including the export.</p>
+            </details>
+            <details>
+              <summary>What does the export look like?</summary>
+              <p>A vertical 1080×1920 MP4 at 60 FPS with AAC audio in sync, ready for Reels, TikTok and Shorts.</p>
+            </details>
+            <details>
+              <summary>Which browser should I use?</summary>
+              <p>A recent Chromium browser such as Chrome or Edge gives the fastest, frame-exact export. Other browsers fall back to a real-time recorder.</p>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <!-- CTA -->
+      <section class="cta wrap">
+        <p class="eyebrow">Ready when your sample is</p>
+        <h2>Make the first one <em>now.</em></h2>
+        <a class="btn" href="app.html">Open the app <span aria-hidden="true">→</span></a>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap footer__row">
+        <a class="logo" href="#top">Sample<em>Screen</em></a>
+        <p>Audio &amp; MIDI vertical video visualizer.</p>
+        <a href="app.html">Open the app →</a>
+      </div>
+    </footer>
+
+    <script type="module" src="/src/landing/landing.ts"></script>
   </body>
 </html>
