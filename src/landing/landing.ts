@@ -14,7 +14,16 @@ for (const grid of document.querySelectorAll<HTMLElement>('.looks')) {
     canvas.setAttribute('aria-hidden', 'true');
     thumb.append(canvas);
     const name = document.createElement('h4');
-    name.textContent = m.name;
+    // Album names are 'Artist "Album"': the artist goes on its own small line so long titles don't wrap.
+    const album = /^(.+?) "(.+)"$/.exec(m.name);
+    if (album) {
+      const artist = document.createElement('span');
+      artist.className = 'look__artist';
+      artist.textContent = album[1];
+      name.append(artist, album[2]);
+    } else {
+      name.textContent = m.name;
+    }
     const text = document.createElement('p');
     text.textContent = m.description;
     card.append(thumb, name, text);

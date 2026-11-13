@@ -106,6 +106,7 @@ h3 { font-size: 1rem; font-weight: 600; }
 .look__thumb canvas { width: 100%; height: 100%; }
 .look:hover .look__thumb, .look:focus-visible .look__thumb { border-color: rgb(var(--accent)); }
 .look h4 { margin: 10px 0 2px; font-size: 0.9375rem; font-weight: 600; }
+.look__artist { display: block; font-size: 0.75rem; font-weight: 500; color: rgb(var(--text-muted)); }
 .look p { color: rgb(var(--text-muted)); font-size: 0.8125rem; line-height: 1.45; }
 
 /* Steps */
