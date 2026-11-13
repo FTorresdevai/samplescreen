@@ -1,4 +1,5 @@
 import React from 'react';
+import { AlbumView, VisualizerSettings } from '../types';
 
 /** Shared control styles (design-system-review.md §3.2, §6). */
 export const inputCls =
@@ -77,6 +78,24 @@ export function Segmented<T extends string | number>({ value, options, onChange,
     </div>
   );
 }
+
+/** MIDI / Audio view switch for modes with input 'both' (sidebar and header share it). */
+export const ViewSwitch: React.FC<{
+  settings: VisualizerSettings;
+  onUpdate: (updates: Partial<VisualizerSettings>) => void;
+  hasMidi: boolean;
+}> = ({ settings, onUpdate, hasMidi }) => (
+  <Segmented<AlbumView>
+    label="View"
+    value={hasMidi ? settings.albumView : 'waveform'}
+    disabled={!hasMidi}
+    onChange={(albumView) => onUpdate({ albumView })}
+    options={[
+      { value: 'midi', label: 'MIDI', title: hasMidi ? 'MIDI view' : 'Load a MIDI file to use the MIDI view' },
+      { value: 'waveform', label: 'Audio', title: 'Audio waveform view' },
+    ]}
+  />
+);
 
 /** Typewriter key. */
 export const Kbd: React.FC<{ children: React.ReactNode }> = ({ children }) => (

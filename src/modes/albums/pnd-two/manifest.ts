@@ -5,7 +5,7 @@ const manifest: ModeManifest = {
   id: 'pnd-two',
   name: 'PARTYNEXTDOOR "PARTYNEXTDOOR TWO"',
   kind: 'album',
-  input: 'midi',
+  input: 'both',
   description: 'White and silver notes on black, with motion-blur trails at speed.',
   palette: { notesColor: '#f4f6f8', circleColor: '#2a2c30', bgColor: '#000000', accentColor: '#c8ccd2', glowColor: '#ffffff' },
   synthTheme: 'matte',

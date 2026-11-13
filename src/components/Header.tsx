@@ -8,9 +8,11 @@ interface HeaderProps {
   isExporting: boolean;
   isSidebarOpen: boolean;
   onToggleSidebar: () => void;
+  exportBlockReason?: string | null; // e.g. MIDI-only mode without a MIDI file
+  viewSwitch?: React.ReactNode;      // MIDI / Audio switch, only for modes with input 'both'
 }
 
-export const Header: React.FC<HeaderProps> = ({ onLoadDemo, onOpenExport, isExporting, isSidebarOpen, onToggleSidebar }) => (
+export const Header: React.FC<HeaderProps> = ({ onLoadDemo, onOpenExport, isExporting, isSidebarOpen, onToggleSidebar, exportBlockReason, viewSwitch }) => (
   <header className="h-12 shrink-0 bg-surface-1 border-b border-line px-4 flex items-center justify-between z-30 select-none">
     {/* Wordmark links back to the landing page */}
     <a href="./" className="font-serif text-2xl leading-none text-text rounded-sm" title="Back to the home page">
@@ -18,10 +20,17 @@ export const Header: React.FC<HeaderProps> = ({ onLoadDemo, onOpenExport, isExpo
     </a>
 
     <div className="flex items-center gap-2">
+      {viewSwitch && <div className="w-32">{viewSwitch}</div>}
       <button type="button" onClick={onLoadDemo} className={secondaryBtnCls} title="Load the 16-bar demo loop">
         Load demo
       </button>
-      <button type="button" onClick={onOpenExport} disabled={isExporting} className={secondaryBtnCls}>
+      <button
+        type="button"
+        onClick={onOpenExport}
+        disabled={isExporting || !!exportBlockReason}
+        className={secondaryBtnCls}
+        title={exportBlockReason ?? undefined}
+      >
         Export
       </button>
       <button

@@ -8,12 +8,12 @@ interface NoteNamesProps {
   onUpdate: (updates: Partial<VisualizerSettings>) => void;
 }
 
-/** Accidentals, octave numbering, chord display and note-name toggles. */
+/** Accidentals, octave numbering, chord display, chord symbol and bar-progress toggles. */
 export const NoteNames: React.FC<NoteNamesProps> = ({ settings, onUpdate }) => {
   const isAlbum = findManifest(settings.modeId)?.kind === 'album';
   const chordOptions: SegmentOption<ChordDisplay>[] = [
     { value: 'bottom', label: 'Bottom', title: 'Show notes in the bottom bar' },
-    ...(isAlbum ? [{ value: 'piano' as const, label: 'Under keys', title: 'Show notes under the album keyboard' }] : []),
+    ...(isAlbum ? [{ value: 'piano' as const, label: 'Above piano', title: 'Show notes just above the album keyboard' }] : []),
     { value: 'off', label: 'Off', title: 'Hide notes and chord' },
   ];
 
@@ -65,13 +65,8 @@ export const NoteNames: React.FC<NoteNamesProps> = ({ settings, onUpdate }) => {
         onChange={(showChordSymbol) => onUpdate({ showChordSymbol })}
       />
       <Toggle
-        label="Note names next to the playhead"
-        checked={settings.noteNameTags !== false}
-        onChange={(noteNameTags) => onUpdate({ noteNameTags })}
-      />
-      <Toggle
         label="Bar progress dashes"
-        checked={settings.showProgressDashes !== false}
+        checked={settings.showProgressDashes === true}
         onChange={(showProgressDashes) => onUpdate({ showProgressDashes })}
       />
     </div>
