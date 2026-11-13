@@ -63,6 +63,7 @@ export interface VisualizerSettings {
 
   // Active Visual Model Theme
   modeId: string;            // id of a folder under src/modes/{standalone,albums}/
+  modeLook?: string;         // id from the active manifest's `looks` (resolveLook falls back to the first)
   loopBars: number;
   noteNameTags: boolean;     // Retired (13/11): no UI, always false. Kept only so mode drawers that still read it compile.
   showProgressDashes: boolean; // Show bar progress dashes below notes
@@ -153,6 +154,8 @@ export interface ModeManifest {
   palette?: Pick<VisualizerSettings, 'notesColor' | 'circleColor' | 'bgColor' | 'accentColor' | 'glowColor'> & { inkColor?: string }; // albums only
   synthTheme?: SynthTheme;     // default 'crimson'
   defaults?: Partial<Pick<VisualizerSettings, 'title' | 'bpm' | 'key' | 'synthModel'>>; // applied on first load only
+  looks?: { id: string; name: string }[]; // standalone: named looks picked in the sidebar (settings.modeLook); first = default
+  photo?: boolean;             // standalone: accepts an optional backdrop photo (shared/backdrop.ts)
 }
 
 export type ModelDrawFn = (ctx: CanvasRenderingContext2D, context: ModelDrawContext) => void;

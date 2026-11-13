@@ -1,9 +1,10 @@
 import React from 'react';
 import { ModeInput, ModeManifest, ParsedMidi, VisualizerSettings } from '../../types';
 import { MODE_MANIFESTS, findManifest } from '../../modes/registry';
-import { applyMode, hasViewSwitch } from '../../core/mode-resolution';
+import { applyMode, hasViewSwitch, resolveLook } from '../../core/mode-resolution';
 import { PALETTES, paletteSettings } from '../../engine/palettes';
 import { Label, SectionHeader, Segmented, Toggle, ViewSwitch } from '../ui';
+import { BackdropPicker } from './BackdropPicker';
 
 const INPUT_TAG: Record<ModeInput, string> = { midi: 'MIDI', audio: 'Audio', both: 'MIDI · Audio' };
 
@@ -72,6 +73,21 @@ export const LookSection: React.FC<LookSectionProps> = ({ settings, onUpdate, mi
           {!hasMidi && <p className="mt-1 text-[11px] text-subtle">Load a MIDI file to use the MIDI view</p>}
         </div>
       )}
+
+      {/* Named looks (e.g. Tungsten / Ice) for modes that declare them */}
+      {manifest?.looks && manifest.looks.length > 1 && (
+        <div>
+          <Label>Look</Label>
+          <Segmented<string>
+            label="Look"
+            value={resolveLook(manifest, settings.modeLook)}
+            onChange={(modeLook) => onUpdate({ modeLook })}
+            options={manifest.looks.map((l) => ({ value: l.id, label: l.name }))}
+          />
+        </div>
+      )}
+
+      {manifest?.photo && <BackdropPicker />}
 
       {/* Palettes belong to standalone modes; albums keep their own colours */}
       {!isAlbum && (

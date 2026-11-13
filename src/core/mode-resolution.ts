@@ -52,3 +52,9 @@ export function applyMode(m: ModeManifest, paletteId?: string): Partial<Visualiz
   if (m.kind === 'album') return { modeId: m.id, inkColor: DEFAULT_INK, ...m.palette };
   return { modeId: m.id, ...paletteSettings(paletteId) };
 }
+
+/** The active look id: `modeLook` when the manifest offers it, else its first look ('' when it has none). */
+export function resolveLook(m: ModeManifest, modeLook: string | undefined): string {
+  const looks = m.looks ?? [];
+  return looks.find((l) => l.id === modeLook)?.id ?? looks[0]?.id ?? '';
+}
