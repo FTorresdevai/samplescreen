@@ -20,6 +20,8 @@ export const LEGACY_MODE_IDS: Record<string, string> = {
   aureola: 'signal-plate',     // Prismatic Aureole
 };
 
+export { inputTag, INPUT_TAG_LABEL, type InputTag } from '../core/mode-resolution';
+
 export function findManifest(id: string | null | undefined): ModeManifest | undefined {
   const resolved = id ? LEGACY_MODE_IDS[id] ?? id : id;
   return MODE_MANIFESTS.find(m => m.id === resolved);

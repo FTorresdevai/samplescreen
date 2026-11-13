@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import { applyMode, exportBlockReason, hasViewSwitch, resolveAlbumView, resolveHardwareId, resolveSynthTheme, showsMidi } from '../src/core/mode-resolution.ts';
+import { INPUT_TAG_LABEL, applyMode, exportBlockReason, hasViewSwitch, inputTag, resolveAlbumView, resolveHardwareId, resolveSynthTheme, showsMidi } from '../src/core/mode-resolution.ts';
 import { ModeManifest, VisualizerSettings } from '../src/types/index.ts';
 
 const album: ModeManifest = {
@@ -56,6 +56,14 @@ test('Mode resolution: input rules (view switch, MIDI-only export block)', () =>
   assert.strictEqual(exportBlockReason(standalone, true), null);
   assert.strictEqual(exportBlockReason(album, false), null);
   assert.strictEqual(exportBlockReason(audioOnly, false), null);
+
+  // Input tags: 'both' gets Audio + MIDI (golden/dual), 'midi' gets MIDI, 'audio' gets Audio
+  assert.strictEqual(inputTag(both), 'both');
+  assert.strictEqual(INPUT_TAG_LABEL[inputTag(both)], 'Audio + MIDI');
+  assert.strictEqual(inputTag(standalone), 'midi');
+  assert.strictEqual(INPUT_TAG_LABEL[inputTag(standalone)], 'MIDI');
+  assert.strictEqual(inputTag(audioOnly), 'audio');
+  assert.strictEqual(INPUT_TAG_LABEL[inputTag(audioOnly)], 'Audio');
 });
 
 test('Mode resolution: synth theme and applyMode palette', () => {

@@ -95,6 +95,14 @@ h3 { font-size: 1rem; font-weight: 600; }
 .look:hover .look__thumb, .look:focus-visible .look__thumb { border-color: rgb(var(--accent)); }
 .look h4 { margin: 10px 0 2px; font-size: 0.9375rem; font-weight: 600; }
 .look__artist { display: block; font-size: 0.75rem; font-weight: 500; color: rgb(var(--text-muted)); }
+/* Input tag before a look's name: 'Audio + MIDI' (amber/gold for dual-input), 'MIDI' / 'Audio' (neutral) */
+.tag { display: inline-block; margin-right: 6px; padding: 1px 5px; border: 1px solid rgb(var(--line-strong)); border-radius: 3px; font-size: 0.625rem; font-weight: 500; line-height: 1.4; letter-spacing: 0.04em; text-transform: uppercase; color: rgb(var(--text-muted)); vertical-align: 2px; white-space: nowrap; }
+.tag--both, .tag--audio-midi { border-color: rgb(var(--accent) / 0.7); color: rgb(var(--accent)); }
+.tag--midi, .tag--audio { border-color: rgb(var(--line-strong)); color: rgb(var(--text-muted)); }
+
+.tag-legend { margin: -8px 0 24px; font-size: 0.8125rem; color: rgb(var(--text-muted)); display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.tag-legend__item { display: inline-flex; align-items: center; }
+.tag-legend__item .tag { margin-right: 6px; vertical-align: baseline; }
 .look p { color: rgb(var(--text-muted)); font-size: 0.8125rem; line-height: 1.45; }
 
 /* Steps */

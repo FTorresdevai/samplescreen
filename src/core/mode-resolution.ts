@@ -12,6 +12,15 @@ import { DEFAULT_INK, paletteSettings } from '../engine/palettes';
 export const DEFAULT_HARDWARE_ID = 'st909';
 export const WAVEFORM_HARDWARE_ID = 'tape-machine';
 
+/** Input tags shown before a mode's name: 'both' (works with audio or audio+midi), 'midi' (needs MIDI file), 'audio' (audio only). */
+export type InputTag = 'both' | 'midi' | 'audio';
+export const INPUT_TAG_LABEL: Record<InputTag, string> = {
+  both: 'Audio + MIDI',
+  midi: 'MIDI',
+  audio: 'Audio',
+};
+export const inputTag = (m: ModeManifest): InputTag => m.input;
+
 /** Without MIDI notes a 'both' mode can only show its waveform view. */
 export function resolveAlbumView(s: VisualizerSettings, hasMidi: boolean): AlbumView {
   return hasMidi ? s.albumView : 'waveform';

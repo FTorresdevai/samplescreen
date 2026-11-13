@@ -1,11 +1,9 @@
 import React from 'react';
-import { ModeInput, ModeManifest, ParsedMidi, VisualizerSettings } from '../../types';
-import { MODE_MANIFESTS, findManifest } from '../../modes/registry';
+import { ModeManifest, ParsedMidi, VisualizerSettings } from '../../types';
+import { INPUT_TAG_LABEL, MODE_MANIFESTS, findManifest, inputTag } from '../../modes/registry';
 import { applyMode, hasViewSwitch } from '../../core/mode-resolution';
 import { PALETTES, paletteSettings } from '../../engine/palettes';
 import { Label, SectionHeader, Segmented, Toggle, ViewSwitch } from '../ui';
-
-const INPUT_TAG: Record<ModeInput, string> = { midi: 'MIDI', audio: 'Audio', both: 'MIDI · Audio' };
 
 interface LookSectionProps {
   settings: VisualizerSettings;
@@ -36,12 +34,36 @@ export const LookSection: React.FC<LookSectionProps> = ({ settings, onUpdate, mi
     <section className="space-y-4">
       <SectionHeader n="01" title="Look" />
 
+      {/* Input tags explanation */}
+      <div className="rounded-md border border-line bg-surface-1 p-2.5 text-[11px] leading-relaxed text-muted space-y-1.5">
+        <div className="flex items-center gap-1.5">
+          <span className="shrink-0 rounded-[3px] border border-accent/70 px-1 text-[9px] font-medium uppercase leading-[14px] tracking-wide text-accent">
+            Audio + MIDI
+          </span>
+          <span className="text-[10.5px]">Works both ways: audio alone (waveform view) or audio + MIDI (notes view).</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="shrink-0 rounded-[3px] border border-line-strong px-1 text-[9px] font-medium uppercase leading-[14px] tracking-wide text-muted">
+            MIDI
+          </span>
+          <span className="text-[10.5px]">Requires a MIDI file to render notes and export.</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="shrink-0 rounded-[3px] border border-line-strong px-1 text-[9px] font-medium uppercase leading-[14px] tracking-wide text-muted">
+            Audio
+          </span>
+          <span className="text-[10.5px]">Reacts to sound only (waveform &amp; spectrum).</span>
+        </div>
+      </div>
+
       {GROUPS.map(({ kind, label }) => (
         <div key={kind}>
           <div className="text-[11px] text-muted mb-1">{label}</div>
           <div className="rounded-md border border-line overflow-hidden divide-y divide-line">
             {MODE_MANIFESTS.filter((m) => m.kind === kind).map((mode) => {
               const selected = settings.modeId === mode.id;
+              const tag = inputTag(mode);
+              const isDual = tag === 'both';
               return (
                 <button
                   key={mode.id}
@@ -52,9 +74,16 @@ export const LookSection: React.FC<LookSectionProps> = ({ settings, onUpdate, mi
                     selected ? 'bg-accent/10 shadow-[inset_2px_0_0_rgb(var(--accent))]' : 'hover:bg-surface-2'
                   }`}
                 >
-                  <span className="flex items-baseline justify-between gap-2">
+                  <span className="flex items-center gap-1.5">
+                    {/* Input tag: 'Audio + MIDI' (gold, works both ways), 'MIDI' / 'Audio' (neutral) */}
+                    <span
+                      className={`shrink-0 rounded-[3px] border px-1 text-[9px] font-medium uppercase leading-[14px] tracking-wide ${
+                        isDual ? 'border-accent/70 text-accent' : 'border-line-strong text-muted'
+                      }`}
+                    >
+                      {INPUT_TAG_LABEL[tag]}
+                    </span>
                     <span className="text-xs font-medium text-text">{mode.name}</span>
-                    <span className="shrink-0 font-mono text-[10px] uppercase text-muted">{INPUT_TAG[mode.input]}</span>
                   </span>
                   <span className="block text-[11px] leading-snug text-muted">{mode.description}</span>
                 </button>

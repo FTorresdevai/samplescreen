@@ -1,6 +1,6 @@
 // Landing page: builds one card per registered mode, starts the hero video, then the live card previews.
 // The previews use the app's real render code (./preview.ts), loaded after first paint.
-import { MODE_MANIFESTS } from '../modes/registry';
+import { INPUT_TAG_LABEL, MODE_MANIFESTS, inputTag } from '../modes/registry';
 
 for (const grid of document.querySelectorAll<HTMLElement>('.looks')) {
   for (const m of MODE_MANIFESTS.filter((x) => x.kind === grid.dataset.kind)) {
@@ -14,15 +14,19 @@ for (const grid of document.querySelectorAll<HTMLElement>('.looks')) {
     canvas.setAttribute('aria-hidden', 'true');
     thumb.append(canvas);
     const name = document.createElement('h4');
+    // Input tag before the name: 'Audio + MIDI' works both ways, 'MIDI' needs a MIDI file, 'Audio' is sound only.
+    const tag = document.createElement('span');
+    tag.className = `tag tag--${inputTag(m)}`;
+    tag.textContent = INPUT_TAG_LABEL[inputTag(m)];
     // Album names are 'Artist "Album"': the artist goes on its own small line so long titles don't wrap.
     const album = /^(.+?) "(.+)"$/.exec(m.name);
     if (album) {
       const artist = document.createElement('span');
       artist.className = 'look__artist';
       artist.textContent = album[1];
-      name.append(artist, album[2]);
+      name.append(artist, tag, album[2]);
     } else {
-      name.textContent = m.name;
+      name.append(tag, m.name);
     }
     const text = document.createElement('p');
     text.textContent = m.description;
