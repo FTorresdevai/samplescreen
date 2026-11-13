@@ -279,14 +279,14 @@ function paintStatic(ctx: CanvasRenderingContext2D, region: ModelRegion, L: Play
   const D = L.device;
   const d = D.w;
 
-  // Desk: soft grey with a light spot near the top.
+  // Desk: dark charcoal with a soft light spot near the top, so the silver body and white earbuds stand out.
   const desk = ctx.createLinearGradient(x, y, x + W * 0.4, y + H);
-  desk.addColorStop(0, '#d4d5d7');
-  desk.addColorStop(1, '#9c9ea1');
+  desk.addColorStop(0, '#4b4d51');
+  desk.addColorStop(1, '#161719');
   ctx.fillStyle = desk;
   ctx.fillRect(x, y, W, H);
   const spot = ctx.createRadialGradient(x + W * 0.55, y + H * 0.25, 0, x + W * 0.55, y + H * 0.25, Math.max(W, H) * 0.75);
-  spot.addColorStop(0, 'rgba(255,255,255,0.35)');
+  spot.addColorStop(0, 'rgba(255,255,255,0.16)');
   spot.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = spot;
   ctx.fillRect(x, y, W, H);
