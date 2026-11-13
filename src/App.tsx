@@ -14,6 +14,7 @@ import { ParsedMidi, VisualizerSettings } from './types';
 import { validateAudioFile, validateMidiFile, sanitizeText } from './core/validator';
 import { parseSampleFileName } from './core/sample-parser';
 import { DEFAULT_MODE_ID, findManifest } from './modes/registry';
+import { DEFAULT_SETTINGS } from './core/default-settings';
 
 export const App: React.FC = () => {
   // References
@@ -31,42 +32,12 @@ export const App: React.FC = () => {
 
   // Settings State with complete feature set matching reference video
   const [settings, setSettings] = useState<VisualizerSettings>({
-    title: initialDefaults.title ?? 'FEELS THE SAME',
-    bpm: initialDefaults.bpm ?? 120,
-    key: initialDefaults.key ?? 'E MIN',
-    producerHandle: 'PRODBYSERROT',
-    watermark: 'samplescreen visualizer • 1080x1920 @ 60 fps',
-
-    notesColor: '#f59e0b',
-    circleColor: '#2b231c',
-    bgColor: '#161310',
-    accentColor: '#fde047',
-    glowColor: '#f59e0b',
-    backgroundGlow: true,
+    ...DEFAULT_SETTINGS,
+    title: initialDefaults.title ?? DEFAULT_SETTINGS.title,
+    bpm: initialDefaults.bpm ?? DEFAULT_SETTINGS.bpm,
+    key: initialDefaults.key ?? DEFAULT_SETTINGS.key,
     albumView: initialView,
-
-    chordDisplay: 'bottom',
-    showChordSymbol: false,
-    showSafeZoneGuides: false,
-    showPreviewHud: false,
-    fitReelsSafeZone: false,
-
     modeId: initialManifest.id,
-    loopBars: 10,
-    noteNameTags: true,
-    showProgressDashes: true,
-
-    accidental: 'sharp',
-    middleC: 3,
-
-    // Intro Sequence Feature (1 - 8 Bars)
-    enableIntro: false,
-    introBars: 4,
-
-    audioSensitivity: 1.2,
-    glowIntensity: 1.3,
-
-    exportLoops: 1,
   });
 
   // Data & Playback State
