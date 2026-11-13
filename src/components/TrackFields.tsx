@@ -5,13 +5,13 @@ import { Label, inputCls } from './ui';
 interface TrackFieldsProps {
   settings: VisualizerSettings;
   onUpdate: (updates: Partial<VisualizerSettings>) => void;
-  compact?: boolean; // one row (file loaded) instead of the first-screen stack
+  compact?: boolean; // one row in the top strip (file loaded, below lg); stacks like the first screen at lg+
 }
 
 /** On-screen text shown above the drop zone: title, key, BPM and producer. Writes straight to settings. */
 export const TrackFields: React.FC<TrackFieldsProps> = ({ settings, onUpdate, compact }) => (
-  <div className={compact ? 'grid grid-cols-2 sm:grid-cols-[2fr_1fr_5rem_1.5fr] gap-2' : 'space-y-2'}>
-    <div className={compact ? 'col-span-2 sm:col-span-1' : ''}>
+  <div className={compact ? 'grid grid-cols-2 sm:grid-cols-[2fr_1fr_5rem_1.5fr] lg:grid-cols-[1fr_5rem] gap-2' : 'space-y-2'}>
+    <div className={compact ? 'col-span-2 sm:col-span-1 lg:col-span-2' : ''}>
       <Label htmlFor="tf-title">Title</Label>
       <input
         id="tf-title"
@@ -47,7 +47,7 @@ export const TrackFields: React.FC<TrackFieldsProps> = ({ settings, onUpdate, co
         />
       </div>
     </div>
-    <div className={compact ? 'col-span-2 sm:col-span-1' : ''}>
+    <div className={compact ? 'col-span-2 sm:col-span-1 lg:col-span-2' : ''}>
       <Label htmlFor="tf-producer">Producer</Label>
       <input
         id="tf-producer"

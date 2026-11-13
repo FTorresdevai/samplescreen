@@ -487,9 +487,9 @@ export const App: React.FC = () => {
         {/* Left / Center Area */}
         <div className="flex-1 flex flex-col min-w-0">
           
-          {/* First screen: large dropzone beside the demo preview. With a file loaded it shrinks to a strip. */}
-          <div className={`flex-1 min-h-0 flex flex-col ${isDemo ? 'lg:flex-row' : ''}`}>
-            <div className={isDemo ? 'shrink-0 lg:w-[24rem] flex flex-col justify-center gap-4 p-4 lg:p-8 lg:pr-0' : 'shrink-0 p-2.5 space-y-2.5 border-b border-line bg-surface-1'}>
+          {/* Fields + dropzone sit in a left column beside the preview (lg+). With a file loaded the dropzone compacts; below lg it becomes a top strip. */}
+          <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
+            <div className={`shrink-0 flex flex-col lg:w-[24rem] lg:justify-center lg:gap-4 lg:p-8 lg:pr-0 ${isDemo ? 'justify-center gap-4 p-4' : 'gap-2.5 p-2.5 border-b border-line bg-surface-1 lg:border-b-0 lg:bg-transparent'}`}>
               {/* Title, key, BPM and producer sit right above the drop zone so they can be set first */}
               <TrackFields settings={settings} onUpdate={handleUpdateSettings} compact={!isDemo} />
               <Dropzone
