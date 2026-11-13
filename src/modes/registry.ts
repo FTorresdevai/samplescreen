@@ -13,8 +13,16 @@ export const DEFAULT_MODE_ID = 'take-care'; // mode shown on first load
 
 export const MODE_MANIFESTS: ModeManifest[] = Object.values(manifests).map(m => m.default);
 
+/** Retired mode ids (13/11) → their replacement, so old links and saved ids keep working. */
+export const LEGACY_MODE_IDS: Record<string, string> = {
+  circular: 'ink-roll',        // Polar Sequencer
+  'orbital-moon': 'aero-desktop', // 3D Celestial Orbit
+  aureola: 'signal-plate',     // Prismatic Aureole
+};
+
 export function findManifest(id: string | null | undefined): ModeManifest | undefined {
-  return MODE_MANIFESTS.find(m => m.id === id);
+  const resolved = id ? LEGACY_MODE_IDS[id] ?? id : id;
+  return MODE_MANIFESTS.find(m => m.id === resolved);
 }
 
 export function getManifest(id: string | null | undefined): ModeManifest {

@@ -116,7 +116,7 @@ src/
   hardware/                consoles drawn in slot 1 (lazy-loaded)
   modes/
     registry.ts            discovers every folder below; no manual registration
-    standalone/<id>/       linear, circular, orbital-moon, aureola
+    standalone/<id>/       linear, piano-waterfall, ink-roll, signal-plate, aero-desktop
     albums/<id>/           take-care, tz-lado-mau, astroworld, pnd-two
     albums/_shell/         layout, keyboard, waterfall and drawing helpers shared by albums
   landing/                 landing page styles, card builder and live previews
@@ -159,8 +159,8 @@ One theme, Dark Studio (walnut), with a single accent, amber `#e69d45`. The toke
 
 | Kind | Medium | Colours |
 |---|---|---|
-| `standalone` | One medium, declared by `input` in the manifest: `'midi'` (linear, circular, orbital-moon) or `'audio'` (aureola). | The user's palette: Walnut, Paper, Receipt or Riso (`src/engine/palettes.ts`). |
-| `album` | Two views, switched in the sidebar: **MIDI** (falling notes and keys) and **Audio** (full-stage waveform; the console becomes the tape machine). Without a MIDI file only the Audio view is available. | The palette in the album's manifest. |
+| `standalone` | Declared by `input` in the manifest: `'midi'` (linear, piano-waterfall, ink-roll; export needs a MIDI file), `'audio'` (signal-plate) or `'both'` (aero-desktop, with the MIDI / Audio view switch). | The user's palette: Walnut, Paper, Receipt or Riso (`src/engine/palettes.ts`). |
+| `album` | `input: 'both'`. Two views, switched in the sidebar or header: **MIDI** (falling notes and keys) and **Audio** (full-stage waveform; the console becomes the tape machine). Without a MIDI file only the Audio view is available. | The palette in the album's manifest. |
 
 Light palettes (Paper, Receipt, Riso) follow extra rules: no radial glow, no `shadowBlur`, round line caps, and all text uses `settings.inkColor`. Use `isLightTone(settings)` from `engine/palettes.ts` and never hardcode white or near-black for text and strokes in a standalone mode.
 

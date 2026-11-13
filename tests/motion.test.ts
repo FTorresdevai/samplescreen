@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import { noteEnvelope, computeTuneModKnob } from '../src/hardware/motion.ts';
-import { polarAngleOf, polarRotation, polarScreenAngle, NEEDLE } from '../src/modes/standalone/circular/index.ts';
 import { MidiNote } from '../src/types/index.ts';
 
 const note = (time: number, midi = 60): MidiNote => ({
@@ -37,18 +36,4 @@ test('Motion: tune mod knob is music-reactive and clamped', () => {
   const attack = computeTuneModKnob([note(1.0)], 1.0, { mid: 0.5, bass: 0.2 });
   assert.ok(attack > 0.8, `Expected > 0.8 but got ${attack}`);
   assert.ok(attack <= 1.0, `Expected <= 1.0 but got ${attack}`);
-});
-
-test('Polar: note screen angle (angleOf(t) + rotation) is -π/2 when now equals note time', () => {
-  const loop = 16;
-  const t = 2.0;
-  const now = 2.0;
-
-  const angle = polarAngleOf(t, loop);
-  const rot = polarRotation(now, loop);
-  const screenAngle = polarScreenAngle(t, now, loop);
-
-  assert.strictEqual(screenAngle, NEEDLE);
-  assert.strictEqual(screenAngle, -Math.PI / 2);
-  assert.strictEqual(angle + rot, -Math.PI / 2);
 });
