@@ -22,6 +22,8 @@ export interface ColorPalette {
   bgColor: string;
   accentColor: string;
   glowColor: string;
+  inkColor: string;         // text drawn on bgColor
+  tone: 'dark' | 'light';
 }
 
 export type SynthTheme = 'crimson' | 'gold';
@@ -43,6 +45,8 @@ export interface VisualizerSettings {
   bgColor: string;          // Background color
   accentColor: string;      // Playhead needle and center orb
   glowColor: string;        // Ambient bloom and backlight
+  inkColor: string;         // Header / footer text; must read on bgColor
+  paletteId: string;        // Standalone palette (engine/palettes.ts); albums use their manifest palette
   backgroundGlow: boolean;  // Toggle audio-reactive ambient glow
 
   // Universal Mode Switch: Piano Roll (with MIDI) vs Waveform View (Pure Audio)
@@ -137,7 +141,7 @@ export interface ModeManifest {
   description: string;
   hardware?: string;           // forces this hardware id (ignores settings.synthModel)
   waveformHardware?: string;   // albums: hardware in 'waveform' view (default 'tape-machine')
-  palette?: Pick<VisualizerSettings, 'notesColor' | 'circleColor' | 'bgColor' | 'accentColor' | 'glowColor'>;
+  palette?: Pick<VisualizerSettings, 'notesColor' | 'circleColor' | 'bgColor' | 'accentColor' | 'glowColor'> & { inkColor?: string }; // albums only
   synthTheme?: SynthTheme;     // default 'crimson'
   defaults?: Partial<Pick<VisualizerSettings, 'title' | 'bpm' | 'key' | 'synthModel'>>; // applied on first load only
 }

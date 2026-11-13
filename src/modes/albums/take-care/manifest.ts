@@ -6,7 +6,7 @@ const manifest: ModeManifest = {
   kind: 'album',
   input: 'midi',
   description: 'Gold note waterfall over a vintage upright piano.',
-  palette: { notesColor: '#eab308', circleColor: '#382014', bgColor: '#150d09', accentColor: '#fde047', glowColor: '#b45309' },
+  palette: { notesColor: '#d4af37', circleColor: '#382014', bgColor: '#150d09', accentColor: '#f5d77f', glowColor: '#b45309', inkColor: '#f3eddf' },
   synthTheme: 'gold',
 };
 

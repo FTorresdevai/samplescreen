@@ -1,5 +1,6 @@
 import { VisualizerSettings } from '../types';
 import { DEFAULT_MODE_ID } from '../modes/registry';
+import { DEFAULT_PALETTE_ID, paletteSettings } from '../engine/palettes';
 
 /** Settings on first load; the app overrides title/BPM/key/mode from the URL, the landing previews reuse them. */
 export const DEFAULT_SETTINGS: VisualizerSettings = {
@@ -9,11 +10,7 @@ export const DEFAULT_SETTINGS: VisualizerSettings = {
   producerHandle: 'PRODBYSERROT',
   watermark: 'samplescreen visualizer • 1080x1920 @ 60 fps',
 
-  notesColor: '#f59e0b',
-  circleColor: '#2b231c',
-  bgColor: '#161310',
-  accentColor: '#fde047',
-  glowColor: '#f59e0b',
+  ...paletteSettings(DEFAULT_PALETTE_ID),
   backgroundGlow: true,
   albumView: 'midi',
 

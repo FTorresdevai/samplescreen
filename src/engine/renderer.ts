@@ -1,5 +1,5 @@
 import { AudioAnalysis, MidiNote, ParsedMidi, VisualizerSettings, TimingInfo, ModelRegion, ModelDrawContext, SynthRegion } from '../types';
-import { hexToRgbaStr } from './palettes';
+import { DEFAULT_INK, darken, hexToRgbaStr, isLightTone } from './palettes';
 import { formatNoteName, detectChord } from './chords';
 import { RenderModules } from './modules';
 import { resolveAlbumView, showsMidi } from '../core/mode-resolution';
@@ -173,14 +173,16 @@ export class CanvasRenderer {
 
     // Both full-screen gradients are pre-rendered once and blitted each frame:
     // computing them per pixel costs ~9 ms/frame on a CPU canvas (Firefox export).
-    ctx.drawImage(this.getStageLayer(width, height), 0, 0);
+    const light = isLightTone(settings);
+    ctx.drawImage(this.getStageLayer(width, height, settings.bgColor || '#141113', light), 0, 0);
 
     // Ambient reactive backlight glow. Every stop's alpha scales with centerAlpha,
     // so drawing the full-alpha layer with globalAlpha = centerAlpha is identical.
-    if (settings.backgroundGlow !== false) {
+    // Light palettes: flat paper, no radial glow (review §5)
+    if (settings.backgroundGlow !== false && !light) {
       const glowColor = settings.glowColor || settings.notesColor || '#f59e0b';
       const reactiveBass = analysis.bass * (settings.audioSensitivity || 1.2);
-      const centerAlpha = Math.min(0.45, 0.20 + reactiveBass * 0.30);
+      const centerAlpha = Math.min(0.35, 0.16 + reactiveBass * 0.24);
 
       ctx.globalAlpha = centerAlpha;
       ctx.drawImage(this.getGlowLayer(width, height, glowColor, settings.accentColor || glowColor), 0, 0);
@@ -199,16 +201,21 @@ export class CanvasRenderer {
     return canvas;
   }
 
-  private getStageLayer(width: number, height: number): HTMLCanvasElement {
-    const key = `${width}x${height}`;
+  /** Dark tone: bgColor darkening toward the bottom. Light tone: flat bgColor. */
+  private getStageLayer(width: number, height: number, bgColor: string, light: boolean): HTMLCanvasElement {
+    const key = `${width}x${height}|${bgColor}|${light}`;
     if (this.stageLayer?.key !== key) {
       this.stageLayer = { key, canvas: this.makeLayer(width, height, c => {
-        const stageGrad = c.createLinearGradient(0, 0, 0, height);
-        stageGrad.addColorStop(0, '#1c1008');
-        stageGrad.addColorStop(0.35, '#100804');
-        stageGrad.addColorStop(0.7, '#070302');
-        stageGrad.addColorStop(1, '#020101');
-        c.fillStyle = stageGrad;
+        if (light) {
+          c.fillStyle = bgColor;
+        } else {
+          const stageGrad = c.createLinearGradient(0, 0, 0, height);
+          stageGrad.addColorStop(0, bgColor);
+          stageGrad.addColorStop(0.35, darken(bgColor, 0.6));
+          stageGrad.addColorStop(0.7, darken(bgColor, 0.3));
+          stageGrad.addColorStop(1, darken(bgColor, 0.1));
+          c.fillStyle = stageGrad;
+        }
         c.fillRect(0, 0, width, height);
       }) };
     }
@@ -246,9 +253,12 @@ export class CanvasRenderer {
     ctx.font = '900 44px "Inter", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#ffffff';
+    const light = isLightTone(settings);
+    const ink = settings.inkColor || DEFAULT_INK;
+    const accent = settings.accentColor || ink;
+    ctx.fillStyle = ink;
 
-    if (settings.glowIntensity > 0) {
+    if (settings.glowIntensity > 0 && !light) {
       ctx.shadowColor = hexToRgbaStr(settings.notesColor || '#f59e0b', 0.5 * settings.glowIntensity);
       ctx.shadowBlur = 14 * settings.glowIntensity;
     }
@@ -280,10 +290,12 @@ export class CanvasRenderer {
     const pillH = 34;
     const pillX = centerX - pillW / 2;
 
-    // Dark pill container with gold border
-    ctx.fillStyle = '#0b0c12';
-    roundRect(ctx, pillX, pillY - pillH / 2, pillW, pillH, 17, true, false);
-    ctx.strokeStyle = 'rgba(212, 175, 55, 0.45)';
+    // Dark tone: filled pill with an accent border. Light tone: ink outline only.
+    if (!light) {
+      ctx.fillStyle = darken(settings.bgColor || '#141113', 0.55);
+      roundRect(ctx, pillX, pillY - pillH / 2, pillW, pillH, 17, true, false);
+    }
+    ctx.strokeStyle = light ? hexToRgbaStr(ink, 0.25) : hexToRgbaStr(accent, 0.45);
     ctx.lineWidth = 1.2;
     roundRect(ctx, pillX, pillY - pillH / 2, pillW, pillH, 17, false, true);
 
@@ -292,19 +304,17 @@ export class CanvasRenderer {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
 
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = ink;
     ctx.fillText(segmentBpm, curX, pillY);
     curX += wBpm;
 
-    ctx.fillStyle = '#fde047';
+    ctx.fillStyle = accent;
     ctx.fillText(segmentDot, curX, pillY);
     curX += wDot;
 
-    ctx.fillStyle = '#fde047';
     ctx.fillText(segmentKey, curX, pillY);
     curX += wKey;
 
-    ctx.fillStyle = '#fde047';
     ctx.fillText(segmentDot, curX, pillY);
     curX += wDot;
 
@@ -321,7 +331,7 @@ export class CanvasRenderer {
     ctx.font = '700 11px "JetBrains Mono", monospace';
     ctx.letterSpacing = '1.2px';
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#b4975a';
+    ctx.fillStyle = hexToRgbaStr(ink, 0.6);
     ctx.fillText(barText, centerX, barY);
     ctx.letterSpacing = '0px';
 
@@ -342,6 +352,9 @@ export class CanvasRenderer {
     const { ctx } = this;
     ctx.save();
 
+    const light = isLightTone(settings);
+    const ink = settings.inkColor || DEFAULT_INK;
+    const accent = settings.accentColor || ink;
     const showNotesRow = notesVisible && settings.chordDisplay === 'bottom';
 
     if (showNotesRow) {
@@ -363,9 +376,11 @@ export class CanvasRenderer {
         }
 
         const fullText = chordPrefix + noteNames.join('  •  ');
-        ctx.fillStyle = '#ffffff';
-        ctx.shadowColor = '#fde047';
-        ctx.shadowBlur = 14;
+        ctx.fillStyle = ink;
+        if (!light) {
+          ctx.shadowColor = accent;
+          ctx.shadowBlur = 14;
+        }
         ctx.fillText(fullText, centerX, notesY);
         ctx.shadowBlur = 0;
       }
@@ -391,13 +406,15 @@ export class CanvasRenderer {
         const isCur = b === currentBarIdx;
 
         if (isCur) {
-          ctx.fillStyle = '#fde047';
-          ctx.shadowColor = '#f59e0b';
-          ctx.shadowBlur = 8;
+          ctx.fillStyle = accent;
+          if (!light) {
+            ctx.shadowColor = settings.notesColor || accent;
+            ctx.shadowBlur = 8;
+          }
           roundRect(ctx, dx, dashesY - dashH / 2, dashW, dashH, 1.5, true, false);
           ctx.shadowBlur = 0;
         } else {
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
+          ctx.fillStyle = hexToRgbaStr(ink, 0.22);
           roundRect(ctx, dx, dashesY - dashH / 2, dashW, dashH, 1.5, true, false);
         }
       }
@@ -409,7 +426,7 @@ export class CanvasRenderer {
     ctx.letterSpacing = '1.2px';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#786851';
+    ctx.fillStyle = hexToRgbaStr(ink, light ? 0.6 : 0.45);
     ctx.fillText((settings.watermark || 'samplescreen visualizer • 1080x1920 @ 60 fps').toLowerCase(), centerX, wmY);
     ctx.letterSpacing = '0px';
 

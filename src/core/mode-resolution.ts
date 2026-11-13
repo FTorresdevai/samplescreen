@@ -1,4 +1,5 @@
 import { AlbumView, ModeManifest, SynthTheme, VisualizerSettings } from '../types';
+import { DEFAULT_INK, paletteSettings } from '../engine/palettes';
 
 /**
  * Single place for "which hardware / theme does this frame use".
@@ -32,7 +33,11 @@ export function resolveSynthTheme(m: ModeManifest): SynthTheme {
   return m.synthTheme ?? 'crimson';
 }
 
-/** Settings patch applied when the user picks a mode in the sidebar. */
-export function applyMode(m: ModeManifest): Partial<VisualizerSettings> {
-  return { modeId: m.id, ...m.palette };
+/**
+ * Settings patch applied when a mode is picked (sidebar, first load, landing previews).
+ * Albums bring their own palette; standalone modes take the user's palette (`paletteId`).
+ */
+export function applyMode(m: ModeManifest, paletteId?: string): Partial<VisualizerSettings> {
+  if (m.kind === 'album') return { modeId: m.id, inkColor: DEFAULT_INK, ...m.palette };
+  return { modeId: m.id, ...paletteSettings(paletteId) };
 }

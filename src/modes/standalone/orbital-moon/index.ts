@@ -1,5 +1,5 @@
 import { ModelDrawContext, ModeModule } from '../../../types';
-import { hexToRgbaStr } from '../../../engine/palettes';
+import { DEFAULT_INK, hexToRgbaStr, isLightTone } from '../../../engine/palettes';
 import { formatNoteName } from '../../../engine/chords';
 
 export function drawOrbitalMoonModel(ctx: CanvasRenderingContext2D, context: ModelDrawContext) {
@@ -7,6 +7,9 @@ export function drawOrbitalMoonModel(ctx: CanvasRenderingContext2D, context: Mod
   const { centerX: cx, centerY: cy, radius } = region;
 
   ctx.save();
+  const light = isLightTone(settings);
+  const ink = settings.inkColor || DEFAULT_INK;
+  if (light) ctx.lineCap = 'round';
 
   const loopProgress = duration > 0 ? (loopTime % duration) / duration : 0;
   const playheadAngle = loopProgress * Math.PI * 2 - Math.PI / 2;
@@ -47,10 +50,12 @@ export function drawOrbitalMoonModel(ctx: CanvasRenderingContext2D, context: Mod
     if (isActive) {
       ctx.strokeStyle = settings.accentColor || '#fde047';
       ctx.lineWidth = 4;
-      ctx.shadowColor = settings.notesColor || '#f59e0b';
-      ctx.shadowBlur = 12;
+      if (!light) {
+        ctx.shadowColor = settings.notesColor || '#f59e0b';
+        ctx.shadowBlur = 12;
+      }
     } else {
-      ctx.strokeStyle = hexToRgbaStr(settings.notesColor || '#f59e0b', 0.5);
+      ctx.strokeStyle = hexToRgbaStr(settings.notesColor || '#f59e0b', light ? 0.85 : 0.5);
       ctx.lineWidth = 2;
     }
     ctx.stroke();
@@ -60,9 +65,11 @@ export function drawOrbitalMoonModel(ctx: CanvasRenderingContext2D, context: Mod
   // 3D Playhead Marker
   const px = Math.cos(playheadAngle) * ringA;
   const py = Math.sin(playheadAngle) * ringB;
-  ctx.fillStyle = '#ffffff';
-  ctx.shadowColor = settings.accentColor || '#fde047';
-  ctx.shadowBlur = 10;
+  ctx.fillStyle = ink;
+  if (!light) {
+    ctx.shadowColor = settings.accentColor || '#fde047';
+    ctx.shadowBlur = 10;
+  }
   ctx.beginPath();
   ctx.arc(px, py, 4.5, 0, Math.PI * 2);
   ctx.fill();
@@ -83,12 +90,14 @@ export function drawOrbitalMoonModel(ctx: CanvasRenderingContext2D, context: Mod
       const tagW = tm.width + 8;
       const tagH = 16;
 
-      ctx.fillStyle = '#fde047';
-      ctx.shadowColor = '#f59e0b';
-      ctx.shadowBlur = 8;
+      ctx.fillStyle = settings.accentColor || '#fde047';
+      if (!light) {
+        ctx.shadowColor = settings.notesColor || '#f59e0b';
+        ctx.shadowBlur = 8;
+      }
       ctx.fillRect(tagX - tagW / 2, tagY - tagH / 2, tagW, tagH);
 
-      ctx.fillStyle = '#0a0502';
+      ctx.fillStyle = settings.bgColor || '#0a0502';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(noteName, tagX, tagY);
@@ -101,10 +110,16 @@ export function drawOrbitalMoonModel(ctx: CanvasRenderingContext2D, context: Mod
   // Center Shaded Moon Sphere
   const moonR = radius * 0.35;
   const moonGrad = ctx.createRadialGradient(cx - moonR * 0.3, cy - moonR * 0.3, 5, cx, cy, moonR);
-  moonGrad.addColorStop(0, '#f1f5f9');
-  moonGrad.addColorStop(0.4, '#94a3b8');
-  moonGrad.addColorStop(0.85, '#334155');
-  moonGrad.addColorStop(1, '#0f172a');
+  if (light) {
+    // Printed look: the moon is a two-tone disc in the palette's own colours
+    moonGrad.addColorStop(0, settings.circleColor || '#b9bfb5');
+    moonGrad.addColorStop(1, hexToRgbaStr(ink, 0.9));
+  } else {
+    moonGrad.addColorStop(0, '#f1f5f9');
+    moonGrad.addColorStop(0.4, '#94a3b8');
+    moonGrad.addColorStop(0.85, '#334155');
+    moonGrad.addColorStop(1, '#0f172a');
+  }
   ctx.fillStyle = moonGrad;
   ctx.beginPath();
   ctx.arc(cx, cy, moonR, 0, Math.PI * 2);

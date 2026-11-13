@@ -7,6 +7,7 @@ import { createDemoMidi, getActiveNotes } from '../engine/midi';
 import { RenderModules, loadRenderModules } from '../engine/modules';
 import { DEFAULT_MODE_ID, getManifest, loadMode } from '../modes/registry';
 import { DEFAULT_SETTINGS } from '../core/default-settings';
+import { applyMode } from '../core/mode-resolution';
 
 const midi = createDemoMidi(16);
 const REGION = { x: 60, y: 795, width: 960, height: 670 };   // the mode card inside the 1080×1920 frame
@@ -15,8 +16,7 @@ function settingsFor(modeId: string): VisualizerSettings {
   const manifest = getManifest(modeId);
   return {
     ...DEFAULT_SETTINGS,
-    ...manifest.palette,
-    modeId: manifest.id,
+    ...applyMode(manifest, DEFAULT_SETTINGS.paletteId),
     bpm: midi.bpm,
     key: 'C MIN',
     producerHandle: 'YOUR.HANDLE',

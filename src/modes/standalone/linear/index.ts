@@ -1,6 +1,6 @@
 import { ModelDrawContext, ModeModule, ParsedMidi } from '../../../types';
 import { formatNoteName } from '../../../engine/chords';
-import { hexToRgbaStr } from '../../../engine/palettes';
+import { DEFAULT_INK, hexToRgbaStr, isLightTone } from '../../../engine/palettes';
 
 // Pitch range per MIDI object, computed once instead of scanning every note each frame
 const rangeCache = new WeakMap<ParsedMidi, { minMidi: number; pitchSpan: number }>();
@@ -22,10 +22,16 @@ export function drawLinearModel(ctx: CanvasRenderingContext2D, context: ModelDra
 
   ctx.save();
 
-  // Glass Frame Box
-  ctx.fillStyle = 'rgba(8, 9, 13, 0.75)';
-  ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+  const light = isLightTone(settings);
+  const ink = settings.inkColor || DEFAULT_INK;
+  const noteAlpha = light ? 0.9 : 0.65;
+
+  // Frame: smoked glass on dark palettes, a plain outline on light ones
+  if (!light) {
+    ctx.fillStyle = 'rgba(8, 9, 13, 0.75)';
+    ctx.fillRect(x, y, w, h);
+  }
+  ctx.strokeStyle = hexToRgbaStr(ink, light ? 0.25 : 0.08);
   ctx.lineWidth = 1;
   ctx.strokeRect(x, y, w, h);
 
@@ -45,7 +51,7 @@ export function drawLinearModel(ctx: CanvasRenderingContext2D, context: ModelDra
   const playheadX = x + (loopTime / windowSecs) * w;
 
   // Vertical Bar Lines
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+  ctx.strokeStyle = light ? hexToRgbaStr(settings.circleColor || ink, 0.9) : hexToRgbaStr(ink, 0.05);
   ctx.lineWidth = 1;
   for (let bar = 0; bar <= totalBars; bar++) {
     const bx = x + (bar / totalBars) * w;
@@ -68,10 +74,12 @@ export function drawLinearModel(ctx: CanvasRenderingContext2D, context: ModelDra
     ctx.save();
     if (isActive) {
       ctx.fillStyle = settings.accentColor || '#fde047';
-      ctx.shadowColor = settings.notesColor || '#f59e0b';
-      ctx.shadowBlur = 10;
+      if (!light) {
+        ctx.shadowColor = settings.notesColor || '#f59e0b';
+        ctx.shadowBlur = 10;
+      }
     } else {
-      ctx.fillStyle = hexToRgbaStr(settings.notesColor || '#f59e0b', 0.65);
+      ctx.fillStyle = hexToRgbaStr(settings.notesColor || '#f59e0b', noteAlpha);
     }
 
     ctx.fillRect(nx, ny, nw, nh);
@@ -84,7 +92,7 @@ export function drawLinearModel(ctx: CanvasRenderingContext2D, context: ModelDra
       ctx.rect(nx, ny, nw, nh);
       ctx.clip();
       ctx.font = `800 ${Math.min(11, Math.max(8, nh - 4))}px "JetBrains Mono", monospace`;
-      ctx.fillStyle = '#0a0502';
+      ctx.fillStyle = settings.bgColor || '#0a0502';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       ctx.fillText(formatNoteName(note.midi, settings.accidental, settings.middleC), nx + 4, ny + nh / 2);
@@ -94,10 +102,14 @@ export function drawLinearModel(ctx: CanvasRenderingContext2D, context: ModelDra
 
   // Vertical Playhead Needle
   ctx.save();
-  ctx.strokeStyle = '#ffffff';
+  ctx.strokeStyle = ink;
   ctx.lineWidth = 2;
-  ctx.shadowColor = settings.accentColor || '#fde047';
-  ctx.shadowBlur = 12;
+  if (light) {
+    ctx.lineCap = 'round';
+  } else {
+    ctx.shadowColor = settings.accentColor || '#fde047';
+    ctx.shadowBlur = 12;
+  }
   ctx.beginPath();
   ctx.moveTo(playheadX, y);
   ctx.lineTo(playheadX, y + h);

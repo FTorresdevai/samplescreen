@@ -44,6 +44,12 @@ test('Mode resolution: notes row follows what the frame shows', () => {
 test('Mode resolution: synth theme and applyMode palette', () => {
   assert.strictEqual(resolveSynthTheme(album), 'gold');
   assert.strictEqual(resolveSynthTheme(standalone), 'crimson');
-  assert.deepStrictEqual(applyMode(album), { modeId: 'album-x', ...album.palette });
-  assert.deepStrictEqual(applyMode(standalone), { modeId: 'solo' });
+  // Albums bring their palette (ink defaults to parchment); standalone modes take the chosen palette
+  assert.deepStrictEqual(applyMode(album), { modeId: 'album-x', inkColor: '#f3eddf', ...album.palette });
+  const paper = applyMode(standalone, 'atelier-paper');
+  assert.strictEqual(paper.modeId, 'solo');
+  assert.strictEqual(paper.paletteId, 'atelier-paper');
+  assert.strictEqual(paper.bgColor, '#f4f2ec');
+  assert.strictEqual(paper.inkColor, '#202a26');
+  assert.strictEqual(applyMode(standalone, 'nope').paletteId, 'studio-walnut');
 });

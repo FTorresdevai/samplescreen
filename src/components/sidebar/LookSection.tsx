@@ -2,6 +2,7 @@ import React from 'react';
 import { AlbumView, ModeManifest, ParsedMidi, VisualizerSettings } from '../../types';
 import { MODE_MANIFESTS, findManifest } from '../../modes/registry';
 import { applyMode } from '../../core/mode-resolution';
+import { PALETTES, paletteSettings } from '../../engine/palettes';
 import { Label, SectionHeader, Segmented, Toggle, inputCls } from '../ui';
 
 interface LookSectionProps {
@@ -25,7 +26,7 @@ export const LookSection: React.FC<LookSectionProps> = ({ settings, onUpdate, mi
   const selectMode = (mode: ModeManifest) => {
     // 'Under keys' only exists in albums; fall back to the bottom bar elsewhere
     const chordFix = mode.kind !== 'album' && settings.chordDisplay === 'piano' ? { chordDisplay: 'bottom' as const } : {};
-    onUpdate({ ...applyMode(mode), ...chordFix });
+    onUpdate({ ...applyMode(mode, settings.paletteId), ...chordFix });
   };
 
   return (
@@ -72,6 +73,19 @@ export const LookSection: React.FC<LookSectionProps> = ({ settings, onUpdate, mi
             ]}
           />
           {!hasMidi && <p className="mt-1 text-[11px] text-subtle">Load a MIDI file to use this view</p>}
+        </div>
+      )}
+
+      {/* Palettes belong to standalone modes; albums keep their own colours */}
+      {!isAlbum && (
+        <div>
+          <Label>Palette</Label>
+          <Segmented<string>
+            label="Palette"
+            value={settings.paletteId}
+            onChange={(id) => onUpdate(paletteSettings(id))}
+            options={PALETTES.map((p) => ({ value: p.id, label: p.name }))}
+          />
         </div>
       )}
 

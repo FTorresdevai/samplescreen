@@ -6,7 +6,6 @@ const manifest: ModeManifest = {
   kind: 'standalone',
   input: 'midi',
   description: 'Notes orbit a shaded moon.',
-  palette: { notesColor: '#e0e7ff', circleColor: '#25254a', bgColor: '#0f1026', accentColor: '#818cf8', glowColor: '#6366f1' },
 };
 
 export default manifest;

@@ -1,5 +1,5 @@
 import { ModelDrawContext, ModeModule } from '../../../types';
-import { hexToRgbaStr } from '../../../engine/palettes';
+import { DEFAULT_INK, hexToRgbaStr, isLightTone } from '../../../engine/palettes';
 
 /**
  * Chromatic Aureola Halo Visual Model
@@ -10,6 +10,9 @@ export function drawAureolaModel(ctx: CanvasRenderingContext2D, context: ModelDr
   const { centerX: cx, centerY: cy, radius } = region;
 
   ctx.save();
+  const light = isLightTone(settings);
+  const ink = settings.inkColor || DEFAULT_INK;
+  if (light) ctx.lineCap = 'round';
 
   const bassPulse = analysis.bass * (settings.audioSensitivity || 1.2);
   const midPulse = analysis.mid * (settings.audioSensitivity || 1.2);
@@ -20,17 +23,19 @@ export function drawAureolaModel(ctx: CanvasRenderingContext2D, context: ModelDr
 
   // 1. MASSIVE COLORFUL AURA BLOOM (Single high-impact radial gradient, zero per-ray shadow cost)
   const haloBloomR = radius * 1.35 + bassPulse * 45;
-  const auraGrad = ctx.createRadialGradient(cx, cy, radius * 0.2, cx, cy, haloBloomR);
-  auraGrad.addColorStop(0, 'rgba(255, 255, 255, 0.45)');
-  auraGrad.addColorStop(0.2, hexToRgbaStr(settings.accentColor || '#fde047', 0.4 + bassPulse * 0.2));
-  auraGrad.addColorStop(0.5, hexToRgbaStr(settings.notesColor || '#f43f5e', 0.28));
-  auraGrad.addColorStop(0.75, hexToRgbaStr(settings.glowColor || '#ec4899', 0.15));
-  auraGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  if (!light) {   // no radial glow on light palettes
+    const auraGrad = ctx.createRadialGradient(cx, cy, radius * 0.2, cx, cy, haloBloomR);
+    auraGrad.addColorStop(0, hexToRgbaStr(ink, 0.35));
+    auraGrad.addColorStop(0.2, hexToRgbaStr(settings.accentColor || '#fde047', Math.min(0.35, 0.25 + bassPulse * 0.1)));
+    auraGrad.addColorStop(0.5, hexToRgbaStr(settings.notesColor || '#f43f5e', 0.28));
+    auraGrad.addColorStop(0.75, hexToRgbaStr(settings.glowColor || '#ec4899', 0.15));
+    auraGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
 
-  ctx.fillStyle = auraGrad;
-  ctx.beginPath();
-  ctx.arc(cx, cy, haloBloomR, 0, Math.PI * 2);
-  ctx.fill();
+    ctx.fillStyle = auraGrad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, haloBloomR, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   // 2. ROTATING PRISMATIC RAY CORONA (Optimized: crisp dynamic strokes without shadowBlur)
   const numRays = 36;
@@ -50,7 +55,9 @@ export function drawAureolaModel(ctx: CanvasRenderingContext2D, context: ModelDr
     const y2 = cy + Math.sin(angle) * rOuter;
 
     const hue = ((i / numRays) * 360 + currentTime * 20) % 360;
-    ctx.strokeStyle = `hsla(${hue}, 90%, 65%, ${0.25 + (analysis.fft[fftIdx] / 255) * 0.6})`;
+    // Dark: prismatic rays. Light: rays in the notes colour (a rainbow washes out on paper).
+    const rayAlpha = 0.25 + (analysis.fft[fftIdx] / 255) * 0.6;
+    ctx.strokeStyle = light ? hexToRgbaStr(settings.notesColor || ink, Math.min(0.95, rayAlpha + 0.2)) : `hsla(${hue}, 90%, 65%, ${rayAlpha})`;
     ctx.lineWidth = i % 4 === 0 ? 2 : 1;
     ctx.beginPath();
     ctx.moveTo(x1, y1);
@@ -77,7 +84,7 @@ export function drawAureolaModel(ctx: CanvasRenderingContext2D, context: ModelDr
   }
   ctx.closePath();
 
-  ctx.strokeStyle = '#f43f5e';
+  ctx.strokeStyle = settings.notesColor || '#f43f5e';
   ctx.lineWidth = 2.5;
   ctx.stroke();
   ctx.restore();
@@ -102,13 +109,13 @@ export function drawAureolaModel(ctx: CanvasRenderingContext2D, context: ModelDr
     else ctx.lineTo(wx, wy);
   }
   ctx.closePath();
-  ctx.strokeStyle = '#fde047';
+  ctx.strokeStyle = settings.accentColor || '#fde047';
   ctx.lineWidth = 2.2;
   ctx.stroke();
   ctx.restore();
 
   // Center jewel core
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = ink;
   ctx.beginPath();
   ctx.arc(cx, cy, 8 + bassPulse * 6, 0, Math.PI * 2);
   ctx.fill();

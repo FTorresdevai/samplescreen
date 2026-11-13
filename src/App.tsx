@@ -15,6 +15,7 @@ import { validateAudioFile, validateMidiFile, sanitizeText } from './core/valida
 import { parseSampleFileName } from './core/sample-parser';
 import { DEFAULT_MODE_ID, findManifest } from './modes/registry';
 import { DEFAULT_SETTINGS } from './core/default-settings';
+import { applyMode } from './core/mode-resolution';
 
 export const App: React.FC = () => {
   // References
@@ -33,11 +34,11 @@ export const App: React.FC = () => {
   // Settings State with complete feature set matching reference video
   const [settings, setSettings] = useState<VisualizerSettings>({
     ...DEFAULT_SETTINGS,
+    ...applyMode(initialManifest, urlParams?.get('palette') ?? DEFAULT_SETTINGS.paletteId), // ?palette=<id> for visual testing
     title: initialDefaults.title ?? DEFAULT_SETTINGS.title,
     bpm: initialDefaults.bpm ?? DEFAULT_SETTINGS.bpm,
     key: initialDefaults.key ?? DEFAULT_SETTINGS.key,
     albumView: initialView,
-    modeId: initialManifest.id,
   });
 
   // Data & Playback State

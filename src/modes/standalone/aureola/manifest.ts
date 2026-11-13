@@ -7,7 +7,6 @@ const manifest: ModeManifest = {
   input: 'audio',
   hardware: 'tape-machine',
   description: 'Audio-reactive halo over a tape machine. Audio only.',
-  palette: { notesColor: '#f43f5e', circleColor: '#3b1c4e', bgColor: '#170f24', accentColor: '#fde047', glowColor: '#ec4899' },
 };
 
 export default manifest;

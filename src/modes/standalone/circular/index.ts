@@ -1,5 +1,5 @@
 import { ModelDrawContext, ModeModule } from '../../../types';
-import { hexToRgbaStr } from '../../../engine/palettes';
+import { DEFAULT_INK, hexToRgbaStr, isLightTone } from '../../../engine/palettes';
 import { formatNoteName } from '../../../engine/chords';
 import { roundRect } from '../../../shared/canvas-utils';
 
@@ -8,12 +8,15 @@ export function drawCircularModel(ctx: CanvasRenderingContext2D, context: ModelD
   const { centerX: cx, centerY: cy, radius } = region;
 
   ctx.save();
+  const light = isLightTone(settings);
+  const ink = settings.inkColor || DEFAULT_INK;
+  if (light) ctx.lineCap = 'round';
 
   const loopProgress = duration > 0 ? (loopTime % duration) / duration : 0;
   const playheadAngle = loopProgress * Math.PI * 2 - Math.PI / 2;
 
   // Vinyl Grooves Outer Edge
-  ctx.strokeStyle = hexToRgbaStr(settings.circleColor || '#2b231c', 0.6);
+  ctx.strokeStyle = hexToRgbaStr(settings.circleColor || '#2b231c', light ? 0.9 : 0.6);
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.arc(cx, cy, radius, 0, Math.PI * 2);
@@ -39,10 +42,12 @@ export function drawCircularModel(ctx: CanvasRenderingContext2D, context: ModelD
     if (isActive) {
       ctx.strokeStyle = settings.accentColor || '#fde047';
       ctx.lineWidth = 4.5;
-      ctx.shadowColor = settings.notesColor || '#f59e0b';
-      ctx.shadowBlur = 12;
+      if (!light) {
+        ctx.shadowColor = settings.notesColor || '#f59e0b';
+        ctx.shadowBlur = 12;
+      }
     } else {
-      ctx.strokeStyle = hexToRgbaStr(settings.notesColor || '#f59e0b', 0.5);
+      ctx.strokeStyle = hexToRgbaStr(settings.notesColor || '#f59e0b', light ? 0.85 : 0.5);
       ctx.lineWidth = 2.5;
     }
     ctx.stroke();
@@ -51,10 +56,12 @@ export function drawCircularModel(ctx: CanvasRenderingContext2D, context: ModelD
 
   // Rotating 360 Playhead Needle
   ctx.save();
-  ctx.strokeStyle = '#ffffff';
+  ctx.strokeStyle = ink;
   ctx.lineWidth = 2;
-  ctx.shadowColor = settings.accentColor || '#fde047';
-  ctx.shadowBlur = 10;
+  if (!light) {
+    ctx.shadowColor = settings.accentColor || '#fde047';
+    ctx.shadowBlur = 10;
+  }
   ctx.beginPath();
   ctx.moveTo(cx, cy);
   ctx.lineTo(cx + Math.cos(playheadAngle) * radius, cy + Math.sin(playheadAngle) * radius);
@@ -76,12 +83,14 @@ export function drawCircularModel(ctx: CanvasRenderingContext2D, context: ModelD
       const tagW = tm.width + 8;
       const tagH = 16;
 
-      ctx.fillStyle = '#fde047';
-      ctx.shadowColor = '#f59e0b';
-      ctx.shadowBlur = 8;
+      ctx.fillStyle = settings.accentColor || '#fde047';
+      if (!light) {
+        ctx.shadowColor = settings.notesColor || '#f59e0b';
+        ctx.shadowBlur = 8;
+      }
       roundRect(ctx, tagX - tagW / 2, tagY - tagH / 2, tagW, tagH, 3, true, false);
 
-      ctx.fillStyle = '#0a0502';
+      ctx.fillStyle = settings.bgColor || '#0a0502';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(noteName, tagX, tagY);
