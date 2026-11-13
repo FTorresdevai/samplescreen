@@ -686,7 +686,7 @@ export function drawST909Synthesizer(
   drawModuleBox(ctx, m1X, upperY, modW1, upperH, 'TRIPLE VCO ▼');
   drawModuleBox(ctx, m2X, upperY, modW2, upperH, 'MIXER ▼');
   drawModuleBox(ctx, m3X, upperY, modW3, upperH, 'VCF | MULTIMODE ▼');
-  drawModuleBox(ctx, m4X, upperY, modW4, upperH, 'ANALOGUE ENVE ▼');
+  drawModuleBox(ctx, m4X, upperY, modW4, upperH, 'ENVELOPES ▼');
 
   // --- MODULE 1: TRIPLE VCO (Complete 12 knobs: 3 rows of 4!) ---
   const loopDuration = midi.duration || 16;
