@@ -58,7 +58,7 @@ h1 { font-size: clamp(2rem, 4.4vw, 3.25rem); font-weight: 500; letter-spacing: -
 .spec dt { color: rgb(var(--text-subtle)); }
 .spec dd { font-family: var(--mono); font-size: 0.8125rem; }
 .frame { display: block; width: min(300px, 72vw); aspect-ratio: 9 / 16; border: 1px solid rgb(var(--line)); border-radius: 8px; overflow: hidden; background: rgb(var(--well)); box-shadow: 0 25px 60px -15px rgb(10 8 9 / 0.6); }
-.frame canvas { width: 100%; height: 100%; }
+.frame video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .hero__preview figcaption { margin-top: 12px; font-size: 0.75rem; color: rgb(var(--text-subtle)); text-align: center; max-width: min(300px, 72vw); }
 
 /* Sections */

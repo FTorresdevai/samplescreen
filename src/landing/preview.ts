@@ -1,11 +1,9 @@
-// Live previews for the landing page, drawn by the same code as the app:
-// the hero is a full 1080×1920 frame (CanvasRenderer), each card is that mode's own draw().
+// Live previews for the landing page cards, each drawn by that mode's own draw() from the app.
+// (The hero is a pre-exported video, see landing.ts.)
 // There is no audio here, so the audio analysis is simulated from the demo MIDI.
 import { AudioAnalysis, MidiNote, ModeModule, ModelDrawContext, VisualizerSettings } from '../types';
-import { CanvasRenderer } from '../engine/renderer';
 import { createDemoMidi, getActiveNotes } from '../engine/midi';
-import { RenderModules, loadRenderModules } from '../engine/modules';
-import { DEFAULT_MODE_ID, getManifest, loadMode } from '../modes/registry';
+import { getManifest, loadMode } from '../modes/registry';
 import { DEFAULT_SETTINGS } from '../core/default-settings';
 import { applyMode } from '../core/mode-resolution';
 
@@ -84,23 +82,25 @@ function drawThumb(th: Thumb, t: number, active: MidiNote[]) {
 
 export function startPreviews() {
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const heroCanvas = document.querySelector<HTMLCanvasElement>('#hero-canvas');
-  const heroSettings = settingsFor(DEFAULT_MODE_ID);
-  const renderer = heroCanvas ? new CanvasRenderer(heroCanvas) : null;
-  let heroModules: RenderModules | null = null;
-  loadRenderModules(heroSettings, true).then((m) => { heroModules = m; kick(); });
+  const thumbs: Thumb[] = [...document.querySelectorAll<HTMLCanvasElement>('canvas[data-mode]')].map((canvas) => (
+    { canvas, settings: settingsFor(canvas.dataset.mode!), mode: null }
+  ));
+  const byCanvas = new Map(thumbs.map((th) => [th.canvas as Element, th]));
 
-  const thumbs: Thumb[] = [...document.querySelectorAll<HTMLCanvasElement>('canvas[data-mode]')].map((canvas) => {
-    const th: Thumb = { canvas, settings: settingsFor(canvas.dataset.mode!), mode: null };
-    loadMode(th.settings.modeId).then((mode) => { th.mode = mode; kick(); });
-    return th;
-  });
-
+  // A mode's code (and its images) is fetched the first time its card nears the viewport, not on page load.
+  const requested = new Set<Thumb>();
   const visible = new Set<Element>();
   const io = new IntersectionObserver((entries) => {
-    for (const e of entries) { if (e.isIntersecting) visible.add(e.target); else visible.delete(e.target); }
-  }, { rootMargin: '80px' });
-  if (heroCanvas) io.observe(heroCanvas);
+    for (const e of entries) {
+      if (!e.isIntersecting) { visible.delete(e.target); continue; }
+      visible.add(e.target);
+      const th = byCanvas.get(e.target);
+      if (th && !requested.has(th)) {
+        requested.add(th);
+        loadMode(th.settings.modeId).then((mode) => { th.mode = mode; kick(); });
+      }
+    }
+  }, { rootMargin: '200px' });
   thumbs.forEach((th) => io.observe(th.canvas));
 
   let frame = 0;
@@ -109,7 +109,6 @@ export function startPreviews() {
     const t = reduced ? 4.2 : (ms / 1000) % midi.duration;
     const active = getActiveNotes(midi.notes, t);
     simulateAnalysis(t, active);
-    if (renderer && heroCanvas && visible.has(heroCanvas)) renderer.render(t, midi, analysis, heroSettings, heroModules);
     if (frame++ % 2 === 0 || reduced) {                      // cards at half rate
       for (const th of thumbs) if (visible.has(th.canvas)) drawThumb(th, t, active);
     }

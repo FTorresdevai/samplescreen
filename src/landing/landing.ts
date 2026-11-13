@@ -1,4 +1,4 @@
-// Landing page: builds one card per registered mode, then starts the live previews.
+// Landing page: builds one card per registered mode, starts the hero video, then the live card previews.
 // The previews use the app's real render code (./preview.ts), loaded after first paint.
 import { MODE_MANIFESTS } from '../modes/registry';
 
@@ -20,6 +20,13 @@ for (const grid of document.querySelectorAll<HTMLElement>('.looks')) {
     card.append(thumb, name, text);
     grid.append(card);
   }
+}
+
+// Hero video: the poster paints first; the clip only downloads and plays after load, and never with reduced motion.
+const heroVideo = document.querySelector<HTMLVideoElement>('#hero-video');
+if (heroVideo && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  const play = () => { heroVideo.preload = 'auto'; heroVideo.play().catch(() => { /* autoplay blocked: poster stays */ }); };
+  if (document.readyState === 'complete') play(); else addEventListener('load', play, { once: true });
 }
 
 import('./preview').then((p) => p.startPreviews()).catch((err) => console.warn('[landing] previews unavailable', err));

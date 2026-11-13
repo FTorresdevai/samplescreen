@@ -54,9 +54,11 @@
 
         <figure class="hero__preview">
           <a class="frame" href="app.html" aria-label="Open the app">
-            <canvas id="hero-canvas" width="1080" height="1920" role="img" aria-label="Preview of a SampleScreen video playing the demo loop"></canvas>
+            <video id="hero-video" width="1080" height="1920" poster="/landing/hero.jpg" muted loop playsinline preload="none" aria-label="SampleScreen video exported from the app">
+              <source src="/landing/hero.mp4" type="video/mp4" />
+            </video>
           </a>
-          <figcaption>Demo loop, drawn live by the app's render engine</figcaption>
+          <figcaption>Exported straight from the app</figcaption>
         </figure>
       </section>
 
