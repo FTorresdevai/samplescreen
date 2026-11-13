@@ -1,92 +1,65 @@
 import { MidiNote, ModelDrawContext, ModeModule } from '../../../types';
 
-// "Y2K Desktop": a glossy late-2000s desktop. Main window = made-up DAW playlist
-// (MIDI notes grouped by register into clips; audio only = one energy track),
-// a smaller cam window with a placeholder silhouette, and a CRT/VHS pass on top.
+// "Y2K Desktop": a glossy late-2000s desktop with one large glass window.
+// Inside it, MIDI notes scroll past a fixed playhead on a pitch axis (piano-roll flow);
+// audio only = a single scrolling energy band. A light CRT/VHS pass sits on top.
 
 interface Rect { x: number; y: number; w: number; h: number }
 
-export interface PlaylistTrack {
-  name: string;
-  notes: MidiNote[];
-  low: number;   // lowest midi pitch in the track
-  high: number;  // highest midi pitch in the track
-}
-
-export interface Clip { start: number; end: number } // seconds
+export interface PitchRange { low: number; high: number } // inclusive midi pitches
 
 const FONT = 'Tahoma, Verdana, "DejaVu Sans", sans-serif';
-const ROWS = 10;
-const MAX_NOTE_TRACKS = 6;
 const ENERGY_BINS = 240;
+const MIN_PITCH_SPAN = 12;     // at least one octave of rows
+const VISIBLE_BARS = 4;        // time span shown across the roll
+const PLAYHEAD_AT = 0.28;      // playhead position as a fraction of the roll width
+const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
 const NO_NOTES: MidiNote[] = [];
 
 const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
 
-function registerName(centre: number): string {
-  if (centre >= 84) return 'Bell Hi';
-  if (centre >= 72) return 'Lead Synth';
-  if (centre >= 60) return 'Keys';
-  if (centre >= 48) return 'Warm Pad';
-  if (centre >= 36) return 'Bass';
-  return 'Sub 808';
+/** "C4"-style name (midi 60 = C4). */
+export function noteName(midi: number): string {
+  return `${NOTE_NAMES[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
 }
 
-/** One playlist track per used octave (high → low); extra octaves are merged so at most `maxTracks` remain. */
-export function groupByRegister(notes: MidiNote[], maxTracks: number = MAX_NOTE_TRACKS): PlaylistTrack[] {
-  if (notes.length === 0) return [];
-  const octaves = [...new Set(notes.map(n => Math.floor(n.midi / 12)))].sort((a, b) => b - a);
-  const groupCount = Math.min(maxTracks, octaves.length);
-  const groupOf = new Map<number, number>();
-  octaves.forEach((oct, i) => groupOf.set(oct, Math.floor((i * groupCount) / octaves.length)));
-
-  const buckets: MidiNote[][] = Array.from({ length: groupCount }, () => []);
-  for (const n of notes) buckets[groupOf.get(Math.floor(n.midi / 12))!].push(n);
-
-  const seen = new Map<string, number>();
-  return buckets.map(bucket => {
-    const low = Math.min(...bucket.map(n => n.midi));
-    const high = Math.max(...bucket.map(n => n.midi));
-    const base = registerName((low + high) / 2);
-    const count = (seen.get(base) ?? 0) + 1;
-    seen.set(base, count);
-    return { name: count > 1 ? `${base} #${count}` : base, notes: bucket, low, high };
-  });
-}
-
-/** Bars that contain notes, merged into contiguous clips (clamped to the loop). */
-export function buildClips(notes: MidiNote[], barLen: number, loop: number): Clip[] {
-  if (barLen <= 0 || notes.length === 0) return [];
-  const barCount = Math.max(1, Math.ceil(loop / barLen - 1e-6));
-  const used = new Array<boolean>(barCount).fill(false);
+/** Used pitch range padded by one semitone each side, widened symmetrically to at least `minSpan` rows. */
+export function pitchRange(notes: MidiNote[], minSpan: number = MIN_PITCH_SPAN): PitchRange {
+  if (notes.length === 0) return { low: 60 - Math.floor(minSpan / 2), high: 60 + Math.ceil(minSpan / 2) - 1 };
+  let low = Infinity;
+  let high = -Infinity;
   for (const n of notes) {
-    const first = Math.floor(n.time / barLen);
-    const last = Math.floor((n.time + Math.max(0, n.duration) - 1e-6) / barLen);
-    for (let b = Math.max(0, first); b <= Math.min(barCount - 1, last); b++) used[b] = true;
+    if (n.midi < low) low = n.midi;
+    if (n.midi > high) high = n.midi;
   }
-  const clips: Clip[] = [];
-  for (let b = 0; b < barCount; b++) {
-    if (!used[b]) continue;
-    const start = b;
-    while (b + 1 < barCount && used[b + 1]) b++;
-    clips.push({ start: start * barLen, end: Math.min(loop, (b + 1) * barLen) });
+  low -= 1;
+  high += 1;
+  const missing = minSpan - (high - low + 1);
+  if (missing > 0) {
+    low -= Math.floor(missing / 2);
+    high += Math.ceil(missing / 2);
   }
-  return clips;
+  return { low, high };
 }
 
-// ---------------------------------------------------------------------------
-// Cam feed plug point: call setCamImage() with an <img>/<video>/<canvas> to replace the silhouette.
-let camImage: CanvasImageSource | null = null;
-export function setCamImage(img: CanvasImageSource | null): void { camImage = img; }
+// Pitch range only changes with the notes array, not per frame.
+const rangeCache = new WeakMap<MidiNote[], PitchRange>();
+function rangeFor(notes: MidiNote[]): PitchRange {
+  let range = rangeCache.get(notes);
+  if (!range) {
+    range = pitchRange(notes);
+    rangeCache.set(notes, range);
+  }
+  return range;
+}
 
-// Audio-only track: energy recorded per timeline bin as the playhead passes (fills in over one loop).
+// Audio-only band: energy recorded per timeline bin as the playhead passes (fills in over one loop).
 let energyBins = new Float32Array(ENERGY_BINS);
 let energyLoop = 0;
 
-// CRT helpers (created lazily; DOM only).
+// CRT scanline pattern (created lazily; DOM only).
 let scanPattern: CanvasPattern | null = null;
-let fringeCanvas: HTMLCanvasElement | null = null;
 
 // ---------------------------------------------------------------------------
 // Drawing primitives
@@ -266,82 +239,52 @@ function drawAppIcon(ctx: CanvasRenderingContext2D, x: number, y: number): void 
   ctx.fillRect(x + 8.8, y + 4, 4, 1.5);
 }
 
-function drawCamIcon(ctx: CanvasRenderingContext2D, x: number, y: number): void {
-  ctx.fillStyle = '#dfe8f2';
-  ctx.beginPath();
-  ctx.arc(x + 9, y + 8, 7, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#20324e';
-  ctx.beginPath();
-  ctx.arc(x + 9, y + 8, 3.5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#7fb6ff';
-  ctx.beginPath();
-  ctx.arc(x + 8, y + 7, 1.3, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#9aa9bc';
-  ctx.fillRect(x + 5, y + 15, 8, 3);
-}
-
 // ---------------------------------------------------------------------------
-// Main window: DAW playlist
+// Window content: header strip + piano-roll flow (or energy band)
 
-interface PlaylistInput {
-  tracks: PlaylistTrack[];      // empty → audio-only view
+interface RollInput {
+  notes: MidiNote[];     // empty → audio-only band
   loop: number;
   now: number;
   barLen: number;
   bpm: number;
-  title: string;
-  handle: string;
   notesColor: string;
   accent: string;
   energy: number;
   isPlaying: boolean;
 }
 
-function drawToolbar(ctx: CanvasRenderingContext2D, r: Rect, p: PlaylistInput): void {
-  // Row 1: menus + transport + BPM.
-  ctx.fillStyle = '#3a3f45';
-  ctx.fillRect(r.x, r.y, r.w, 34);
-  ctx.fillStyle = '#d6dbe0';
-  ctx.font = `bold 12px ${FONT}`;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  const menus = ['FILE', 'EDIT', 'INSERT', 'CLIPS', 'VIEW', 'MIX', 'HELP'];
-  let mx = r.x + 12;
-  for (const m of menus) {
-    ctx.fillText(m, mx, r.y + 17);
-    mx += ctx.measureText(m).width + 9;
-  }
+const HEADER_H = 30;
+const LABEL_W = 40;
 
-  // Transport: play / stop / record.
-  let tx = mx + 18;
-  const ty = r.y + 7;
-  ctx.fillStyle = p.isPlaying ? '#e2483b' : '#5b6168';
-  ctx.fillRect(tx, ty, 34, 20);
-  ctx.fillStyle = '#ffffff';
+function drawHeaderStrip(ctx: CanvasRenderingContext2D, r: Rect, p: RollInput): void {
+  const g = ctx.createLinearGradient(0, r.y, 0, r.y + HEADER_H);
+  g.addColorStop(0, '#3c434b');
+  g.addColorStop(1, '#262b31');
+  ctx.fillStyle = g;
+  ctx.fillRect(r.x, r.y, r.w, HEADER_H);
+  ctx.fillStyle = '#15191d';
+  ctx.fillRect(r.x, r.y + HEADER_H - 1, r.w, 1);
+
+  const ty = r.y + 5;
+  let tx = r.x + 10;
+  // Play state lamp.
+  ctx.fillStyle = p.isPlaying ? '#3ccf6e' : '#5b6168';
   ctx.beginPath();
-  ctx.moveTo(tx + 13, ty + 5); ctx.lineTo(tx + 23, ty + 10); ctx.lineTo(tx + 13, ty + 15); ctx.closePath();
+  ctx.moveTo(tx + 4, ty + 4); ctx.lineTo(tx + 14, ty + 10); ctx.lineTo(tx + 4, ty + 16); ctx.closePath();
   ctx.fill();
-  tx += 42;
-  ctx.fillStyle = '#c9ced4';
-  ctx.fillRect(tx + 5, ty + 5, 10, 10);
   tx += 26;
-  ctx.fillStyle = '#d44a3a';
-  ctx.beginPath();
-  ctx.arc(tx + 10, ty + 10, 6, 0, Math.PI * 2);
-  ctx.fill();
-  tx += 30;
 
   // BPM LCD.
   ctx.fillStyle = '#15191d';
   ctx.fillRect(tx, ty, 78, 20);
   ctx.strokeStyle = '#596068';
+  ctx.lineWidth = 1;
   ctx.strokeRect(tx + 0.5, ty + 0.5, 77, 19);
   ctx.fillStyle = '#e9edf0';
   ctx.font = `bold 14px ${FONT}`;
   ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
   ctx.fillText(p.bpm.toFixed(3), tx + 72, ty + 11);
   ctx.textAlign = 'left';
   ctx.font = `9px ${FONT}`;
@@ -350,199 +293,101 @@ function drawToolbar(ctx: CanvasRenderingContext2D, r: Rect, p: PlaylistInput): 
   tx += 116;
 
   // Song position (bar:beat).
-  const beatLen = p.barLen / 4;
   const bar = Math.floor(p.now / p.barLen) + 1;
-  const beat = Math.floor((p.now % p.barLen) / beatLen) + 1;
-  if (tx + 70 < r.x + r.w - 10) {
-    ctx.fillStyle = '#15191d';
-    ctx.fillRect(tx, ty, 64, 20);
-    ctx.fillStyle = '#ffb347';
-    ctx.font = `bold 13px ${FONT}`;
-    ctx.textAlign = 'center';
-    ctx.fillText(`${bar}:${String(beat).padStart(2, '0')}`, tx + 32, ty + 11);
-  }
-
-  // Row 2: project line.
-  const y2 = r.y + 34;
-  ctx.fillStyle = '#30353a';
-  ctx.fillRect(r.x, y2, r.w, 24);
-  ctx.fillStyle = '#aab2ba';
-  ctx.font = `11px ${FONT}`;
-  ctx.textAlign = 'left';
-  const slug = p.title.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'untitled';
-  ctx.fillText(`|  ${slug}_v2.prj   ${p.handle}`, r.x + 10, y2 + 12, r.w - 20);
-
-  // Row 3: playlist breadcrumb.
-  const y3 = y2 + 24;
-  ctx.fillStyle = '#26292d';
-  ctx.fillRect(r.x, y3, r.w, 24);
-  ctx.fillStyle = '#d4d9de';
-  ctx.font = `bold 12px ${FONT}`;
-  ctx.fillText(`Song  ›  Timeline  ›  ${p.title.toUpperCase()}`, r.x + 12, y3 + 12, r.w - 24);
+  const beat = Math.floor((p.now % p.barLen) / (p.barLen / 4)) + 1;
+  ctx.fillStyle = '#15191d';
+  ctx.fillRect(tx, ty, 64, 20);
+  ctx.fillStyle = '#ffb347';
+  ctx.font = `bold 13px ${FONT}`;
+  ctx.textAlign = 'center';
+  ctx.fillText(`${bar}:${String(beat).padStart(2, '0')}`, tx + 32, ty + 11);
 }
 
-function drawPlaylist(ctx: CanvasRenderingContext2D, inner: Rect, p: PlaylistInput, analysis: ModelDrawContext['analysis']): void {
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(inner.x, inner.y, inner.w, inner.h);
-  ctx.clip();
-
-  ctx.fillStyle = '#2b2f33';
-  ctx.fillRect(inner.x, inner.y, inner.w, inner.h);
-  drawToolbar(ctx, inner, p);
-
-  const headerW = 118;
-  const scrollW = 12;
-  const rulerY = inner.y + 82;
-  const rulerH = 20;
-  const area: Rect = { x: inner.x + headerW, y: rulerY + rulerH, w: inner.w - headerW - scrollW, h: inner.y + inner.h - rulerY - rulerH };
-  const rowH = area.h / ROWS;
-  const xOf = (t: number): number => area.x + (t / p.loop) * area.w;
-
-  // Ruler with bar numbers.
-  ctx.fillStyle = '#3b4046';
-  ctx.fillRect(inner.x, rulerY, inner.w, rulerH);
-  const bars = Math.max(1, Math.round(p.loop / p.barLen));
-  const labelEvery = bars > 16 ? 4 : bars > 8 ? 2 : 1;
-  ctx.font = `10px ${FONT}`;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  for (let b = 0; b < bars; b++) {
-    const x = xOf(b * p.barLen);
-    ctx.fillStyle = '#7d858d';
-    ctx.fillRect(x, rulerY + 12, 1, 8);
-    if (b % labelEvery === 0) {
-      ctx.fillStyle = '#c9cfd5';
-      ctx.fillText(String(b + 1), x + 3, rulerY + 8);
-    }
+/** Calls fn for each copy of [t0, t1) (shifted by ±loop) that overlaps the visible time span. */
+function forEachWrap(t0: number, t1: number, view0: number, view1: number, loop: number, fn: (a: number, b: number) => void): void {
+  for (const off of [-loop, 0, loop]) {
+    const a = t0 + off;
+    const b = t1 + off;
+    if (b > view0 && a < view1) fn(a, b);
   }
+}
 
-  // Track headers + lanes.
-  for (let i = 0; i < ROWS; i++) {
-    const y = area.y + i * rowH;
-    ctx.fillStyle = i % 2 === 0 ? '#34393e' : '#31353a';
+function drawPianoRoll(ctx: CanvasRenderingContext2D, area: Rect, p: RollInput, xOf: (t: number) => number, view0: number, view1: number): void {
+  const range = rangeFor(p.notes);
+  const rows = range.high - range.low + 1;
+  const rowH = area.h / rows;
+  const yOf = (midi: number): number => area.y + (range.high - midi) * rowH;
+
+  // Row shading (black keys darker) + compact pitch labels.
+  ctx.font = `${Math.max(8, Math.min(11, rowH * 0.75))}px ${FONT}`;
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  const everyRow = rowH >= 11; // label every row when there is room, else only the Cs
+  for (let m = range.low; m <= range.high; m++) {
+    const y = yOf(m);
+    const black = NOTE_NAMES[((m % 12) + 12) % 12].length > 1;
+    ctx.fillStyle = black ? '#23272c' : '#2c3136';
     ctx.fillRect(area.x, y, area.w, rowH);
-    ctx.fillStyle = '#3d4248';
-    ctx.fillRect(inner.x, y, headerW, rowH);
-    ctx.fillStyle = '#23272b';
-    ctx.fillRect(inner.x, y + rowH - 1, inner.w, 1);
-    ctx.fillStyle = '#b8c0c7';
-    ctx.font = `11px ${FONT}`;
-    ctx.fillText(`Track ${i + 1}`, inner.x + 10, y + 12);
-    ctx.fillStyle = '#e8ecef';
-    ctx.beginPath();
-    ctx.arc(inner.x + headerW - 14, y + rowH - 14, 3.5, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  // Beat grid.
-  for (let b = 0; b <= bars; b++) {
-    ctx.fillStyle = b % 4 === 0 ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.22)';
-    ctx.fillRect(xOf(b * p.barLen), area.y, 1, area.h);
+    if (m % 12 === 0) {
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(area.x, y + rowH - 1, area.w, 1);
+    }
+    ctx.fillStyle = black ? '#2b3036' : '#3a4047';
+    ctx.fillRect(area.x - LABEL_W, y, LABEL_W, rowH);
+    if (everyRow || m % 12 === 0) {
+      ctx.fillStyle = m % 12 === 0 ? '#e3e8ec' : '#8f98a1';
+      ctx.fillText(noteName(m), area.x - 5, y + rowH / 2);
+    }
   }
 
-  if (p.tracks.length > 0) {
-    p.tracks.forEach((track, i) => {
-      if (i >= ROWS) return;
-      drawNoteTrack(ctx, track, { x: area.x, y: area.y + i * rowH, w: area.w, h: rowH }, p, xOf);
-    });
-  } else {
-    drawAudioTrack(ctx, { x: area.x, y: area.y, w: area.w, h: rowH }, p, xOf, analysis);
-  }
-
-  // Scrollbar.
-  ctx.fillStyle = '#25282c';
-  ctx.fillRect(area.x + area.w, rulerY, scrollW, inner.y + inner.h - rulerY);
-  ctx.fillStyle = '#5b636b';
-  ctx.fillRect(area.x + area.w + 2, area.y + 4, scrollW - 4, area.h * 0.55);
-
-  // Red playhead.
-  const px = xOf(p.now);
-  ctx.fillStyle = p.accent;
-  ctx.beginPath();
-  ctx.moveTo(px - 6, rulerY + 4); ctx.lineTo(px + 6, rulerY + 4); ctx.lineTo(px, rulerY + rulerH); ctx.closePath();
-  ctx.fill();
-  ctx.shadowColor = p.accent;
-  ctx.shadowBlur = 8;
-  ctx.fillRect(px - 1, rulerY + rulerH, 2, area.h);
-  ctx.restore();
-}
-
-function drawClipFrame(ctx: CanvasRenderingContext2D, x0: number, x1: number, lane: Rect, label: string): Rect {
-  const top = lane.y + 4;
-  const h = lane.h - 8;
-  ctx.fillStyle = 'rgba(92, 104, 116, 0.55)';
-  ctx.fillRect(x0, top, x1 - x0, h);
-  ctx.fillStyle = 'rgba(150, 162, 176, 0.75)';
-  ctx.fillRect(x0, top, x1 - x0, 13);
-  ctx.strokeStyle = 'rgba(15, 18, 22, 0.8)';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x0 + 0.5, top + 0.5, x1 - x0 - 1, h - 1);
+  // Grid and notes stay inside the roll so they never scroll over the label column.
   ctx.save();
   ctx.beginPath();
-  ctx.rect(x0, top, x1 - x0, 13);
+  ctx.rect(area.x, area.y, area.w, area.h);
   ctx.clip();
-  ctx.fillStyle = '#101418';
-  ctx.font = `bold 10px ${FONT}`;
-  ctx.textBaseline = 'middle';
-  ctx.fillText(`▤ ${label}`, x0 + 3, top + 7);
-  ctx.restore();
-  return { x: x0, y: top + 15, w: x1 - x0, h: h - 18 };
-}
 
-// Grouping and clips only change with the notes array / tempo / loop, not per frame
-const trackCache = new WeakMap<MidiNote[], PlaylistTrack[]>();
-const clipCache = new WeakMap<MidiNote[], { key: string; clips: Clip[] }>();
-
-function tracksFor(notes: MidiNote[]): PlaylistTrack[] {
-  let tracks = trackCache.get(notes);
-  if (!tracks) {
-    tracks = groupByRegister(notes);
-    trackCache.set(notes, tracks);
+  // Bar / beat grid.
+  const beatLen = p.barLen / 4;
+  for (let k = Math.floor(view0 / beatLen); k * beatLen <= view1; k++) {
+    ctx.fillStyle = k % 4 === 0 ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.2)';
+    ctx.fillRect(Math.round(xOf(k * beatLen)), area.y, 1, area.h);
   }
-  return tracks;
-}
 
-function clipsFor(notes: MidiNote[], barLen: number, loop: number): Clip[] {
-  const key = `${barLen}|${loop}`;
-  const hit = clipCache.get(notes);
-  if (hit && hit.key === key) return hit.clips;
-  const clips = buildClips(notes, barLen, loop);
-  clipCache.set(notes, { key, clips });
-  return clips;
-}
-
-function drawNoteTrack(ctx: CanvasRenderingContext2D, track: PlaylistTrack, lane: Rect, p: PlaylistInput, xOf: (t: number) => number): void {
-  const clips = clipsFor(track.notes, p.barLen, p.loop);
-  const span = Math.max(1, track.high - track.low);
-  for (const clip of clips) {
-    const body = drawClipFrame(ctx, xOf(clip.start), xOf(clip.end), lane, track.name);
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(body.x, body.y, body.w, body.h);
-    ctx.clip();
-    for (const n of track.notes) {
-      if (n.time + n.duration <= clip.start || n.time >= clip.end) continue;
-      const y = body.y + body.h - 2 - ((n.midi - track.low) / span) * (body.h - 4);
-      const x0 = xOf(n.time);
-      const w = Math.max(2, xOf(n.time + n.duration) - x0 - 1);
-      const active = p.now >= n.time && p.now < n.time + n.duration;
+  // Notes: dimmed when idle, full colour + glow while playing.
+  const barH = Math.max(2, rowH - 2);
+  ctx.font = `bold ${Math.max(8, Math.min(11, barH - 2))}px ${FONT}`;
+  ctx.textAlign = 'left';
+  for (const n of p.notes) {
+    forEachWrap(n.time, n.time + n.duration, view0, view1, p.loop, (a, b) => {
+      const x0 = xOf(a);
+      const w = Math.max(3, xOf(b) - x0 - 1);
+      const y = yOf(n.midi) + (rowH - barH) / 2;
+      const active = p.now >= a && p.now < b;
+      ctx.globalAlpha = active ? 1 : 0.55;
+      ctx.fillStyle = p.notesColor;
       if (active) {
-        ctx.fillStyle = p.notesColor;
         ctx.shadowColor = p.notesColor;
-        ctx.shadowBlur = 8;
-        ctx.fillRect(x0, y - 2, w, 4);
-        ctx.shadowBlur = 0;
-      } else {
-        ctx.fillStyle = 'rgba(225, 232, 238, 0.85)';
-        ctx.fillRect(x0, y - 1, w, 2);
+        ctx.shadowBlur = 12;
       }
-    }
-    ctx.restore();
+      ctx.fillRect(x0, y, w, barH);
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = active ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.18)';
+      ctx.fillRect(x0, y, w, Math.max(1, barH * 0.3));
+      if (barH >= 10) {
+        const label = noteName(n.midi);
+        if (ctx.measureText(label).width + 6 <= w) {
+          ctx.fillStyle = active ? '#0b1830' : 'rgba(8, 16, 30, 0.85)';
+          ctx.fillText(label, x0 + 3, y + barH / 2 + 0.5);
+        }
+      }
+    });
   }
+  ctx.restore();
 }
 
-function drawAudioTrack(
-  ctx: CanvasRenderingContext2D, lane: Rect, p: PlaylistInput, xOf: (t: number) => number,
+function drawEnergyBand(
+  ctx: CanvasRenderingContext2D, area: Rect, p: RollInput, xOf: (t: number) => number, view0: number, view1: number,
   analysis: ModelDrawContext['analysis'],
 ): void {
   if (energyLoop !== p.loop) {
@@ -552,158 +397,73 @@ function drawAudioTrack(
   const bin = Math.min(ENERGY_BINS - 1, Math.floor((p.now / p.loop) * ENERGY_BINS));
   if (p.isPlaying) energyBins[bin] = p.energy;
 
-  const body = drawClipFrame(ctx, xOf(0), xOf(p.loop), lane, `Audio  ${p.title}.wav`);
-  const mid = body.y + body.h / 2;
-  const binW = body.w / ENERGY_BINS;
+  ctx.fillStyle = '#2a2f34';
+  ctx.fillRect(area.x, area.y, area.w, area.h);
+  const mid = area.y + area.h / 2;
+  const maxHalf = area.h * 0.42;
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fillRect(area.x, mid, area.w, 1);
+
+  const binLen = p.loop / ENERGY_BINS;
+  ctx.fillStyle = p.notesColor;
   for (let i = 0; i < ENERGY_BINS; i++) {
-    const half = Math.max(0.5, energyBins[i] * (body.h / 2 - 1));
-    ctx.fillStyle = i <= bin ? 'rgba(230, 236, 242, 0.9)' : 'rgba(230, 236, 242, 0.45)';
-    ctx.fillRect(body.x + i * binW, mid - half, Math.max(1, binW - 0.5), half * 2);
+    forEachWrap(i * binLen, (i + 1) * binLen, view0, view1, p.loop, (a, b) => {
+      const x0 = xOf(a);
+      const half = Math.max(0.5, energyBins[i] * maxHalf);
+      ctx.globalAlpha = a <= p.now ? 0.85 : 0.35;
+      ctx.fillRect(x0, mid - half, Math.max(1, xOf(b) - x0 - 1), half * 2);
+    });
   }
+  ctx.globalAlpha = 1;
 
   // Live scope just behind the playhead.
-  const wave = analysis.waveform;
+  const wave = analysis?.waveform;
   if (wave && wave.length > 0) {
-    const sw = Math.min(90, body.w * 0.15);
+    const sw = Math.min(120, area.w * 0.15);
     const sx = xOf(p.now) - sw;
-    ctx.strokeStyle = p.notesColor;
+    const step = Math.max(1, Math.floor(wave.length / 90));
+    const count = wave.length / step;
+    ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    const step = Math.max(1, Math.floor(wave.length / 90));
     for (let i = 0, k = 0; i < wave.length; i += step, k++) {
-      const x = sx + (k / (wave.length / step)) * sw;
-      const y = mid + ((wave[i] - 128) / 128) * (body.h / 2 - 1);
+      const x = sx + (k / count) * sw;
+      const y = mid + ((wave[i] - 128) / 128) * maxHalf;
       if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
     }
     ctx.stroke();
   }
 }
 
-// ---------------------------------------------------------------------------
-// Cam window
-
-function drawCamToolbar(ctx: CanvasRenderingContext2D, r: Rect): void {
-  const g = ctx.createLinearGradient(0, r.y, 0, r.y + r.h);
-  g.addColorStop(0, '#5a86b8');
-  g.addColorStop(0.5, '#2f5888');
-  g.addColorStop(0.52, '#1f456f');
-  g.addColorStop(1, '#2d5a8c');
-  ctx.fillStyle = g;
-  ctx.fillRect(r.x, r.y, r.w, r.h);
-  // Round menu orb (generic glossy disc).
-  const cx = r.x + 22;
-  const cy = r.y + r.h / 2;
-  const orb = ctx.createRadialGradient(cx - 3, cy - 4, 1, cx, cy, 12);
-  orb.addColorStop(0, '#ffffff');
-  orb.addColorStop(0.35, '#8fc3f0');
-  orb.addColorStop(1, '#1c4a7a');
-  ctx.fillStyle = orb;
-  ctx.beginPath();
-  ctx.arc(cx, cy, 11, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-  ctx.stroke();
-  ctx.fillStyle = '#e7f0fa';
-  ctx.font = `10px ${FONT}`;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('▾', cx + 16, cy);
-  // Help button.
-  const hx = r.x + r.w - 34;
-  ctx.beginPath();
-  ctx.arc(hx, cy, 9, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(255,255,255,0.18)';
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-  ctx.stroke();
-  ctx.fillStyle = '#ffffff';
-  ctx.font = `bold 12px ${FONT}`;
-  ctx.textAlign = 'center';
-  ctx.fillText('?', hx, cy + 1);
-  ctx.textAlign = 'left';
-  ctx.font = `10px ${FONT}`;
-  ctx.fillText('▾', hx + 13, cy);
-}
-
-/** Placeholder room + silhouette; an image set via setCamImage() replaces it (cover-fit). */
-function drawCamFeed(ctx: CanvasRenderingContext2D, r: Rect, t: number, energy: number, bass: number): void {
+function drawWindowContent(ctx: CanvasRenderingContext2D, inner: Rect, p: RollInput, analysis: ModelDrawContext['analysis']): void {
   ctx.save();
   ctx.beginPath();
-  ctx.rect(r.x, r.y, r.w, r.h);
+  ctx.rect(inner.x, inner.y, inner.w, inner.h);
   ctx.clip();
+  ctx.fillStyle = '#2b2f33';
+  ctx.fillRect(inner.x, inner.y, inner.w, inner.h);
+  drawHeaderStrip(ctx, inner, p);
 
-  if (camImage) {
-    const iw = (camImage as { width: number }).width || r.w;
-    const ih = (camImage as { height: number }).height || r.h;
-    const s = Math.max(r.w / iw, r.h / ih);
-    ctx.drawImage(camImage, r.x + (r.w - iw * s) / 2, r.y + (r.h - ih * s) / 2, iw * s, ih * s);
-  } else {
-    const room = ctx.createLinearGradient(r.x, r.y, r.x + r.w, r.y + r.h);
-    room.addColorStop(0, '#0d1f4a');
-    room.addColorStop(0.6, '#13306f');
-    room.addColorStop(1, '#081433');
-    ctx.fillStyle = room;
-    ctx.fillRect(r.x, r.y, r.w, r.h);
+  const hasNotes = p.notes.length > 0;
+  const left = hasNotes ? LABEL_W : 0;
+  const area: Rect = { x: inner.x + left, y: inner.y + HEADER_H, w: inner.w - left, h: inner.h - HEADER_H };
+  const span = p.barLen * VISIBLE_BARS;
+  const view0 = p.now - span * PLAYHEAD_AT;
+  const view1 = view0 + span;
+  const xOf = (t: number): number => area.x + ((t - view0) / span) * area.w;
 
-    // Monitor glow on the back wall + LED strip on the right.
-    const mon = ctx.createRadialGradient(r.x + r.w * 0.2, r.y + r.h * 0.35, 4, r.x + r.w * 0.2, r.y + r.h * 0.35, r.w * 0.35);
-    mon.addColorStop(0, `rgba(110, 170, 255, ${0.35 + energy * 0.25})`);
-    mon.addColorStop(1, 'rgba(110, 170, 255, 0)');
-    ctx.fillStyle = mon;
-    ctx.fillRect(r.x, r.y, r.w, r.h);
-    ctx.fillStyle = `rgba(90, 150, 255, ${0.5 + energy * 0.5})`;
-    ctx.shadowColor = '#5aa0ff';
-    ctx.shadowBlur = 24;
-    ctx.fillRect(r.x + r.w * 0.86, r.y + r.h * 0.15, 5, r.h * 0.7);
-    ctx.shadowBlur = 0;
+  if (hasNotes) drawPianoRoll(ctx, area, p, xOf, view0, view1);
+  else drawEnergyBand(ctx, area, p, xOf, view0, view1, analysis);
 
-    // Chair back.
-    ctx.fillStyle = '#0a1226';
-    rr(ctx, { x: r.x + r.w * 0.2, y: r.y + r.h * 0.42, w: r.w * 0.16, h: r.h * 0.6 }, 14);
-    ctx.fill();
-
-    // Head-and-shoulders silhouette with a blue rim light; bobs with the beat.
-    const bob = Math.sin(t * 1.3) * 2 + bass * 6;
-    const cx = r.x + r.w * 0.52;
-    const headY = r.y + r.h * 0.45 + bob;
-    const headR = r.h * 0.17;
-    ctx.fillStyle = '#05080f';
-    ctx.strokeStyle = 'rgba(120, 175, 255, 0.55)';
-    ctx.lineWidth = 2;
-    ctx.shadowColor = 'rgba(90, 150, 255, 0.8)';
-    ctx.shadowBlur = 14;
-    ctx.beginPath();
-    ctx.moveTo(cx - r.w * 0.34, r.y + r.h + 4);
-    ctx.bezierCurveTo(cx - r.w * 0.3, headY + headR * 1.9, cx - headR * 1.1, headY + headR * 1.6, cx - headR * 0.45, headY + headR * 1.05);
-    ctx.lineTo(cx + headR * 0.45, headY + headR * 1.05);
-    ctx.bezierCurveTo(cx + headR * 1.1, headY + headR * 1.6, cx + r.w * 0.3, headY + headR * 1.9, cx + r.w * 0.34, r.y + r.h + 4);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.ellipse(cx, headY, headR * 0.85, headR, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-  }
-
-  // REC tag + timecode.
-  const blink = Math.floor(t * 1.5) % 2 === 0;
-  ctx.font = `bold 13px ${FONT}`;
-  ctx.textBaseline = 'middle';
-  ctx.textAlign = 'left';
-  if (blink) {
-    ctx.fillStyle = '#ff3b30';
-    ctx.beginPath();
-    ctx.arc(r.x + 18, r.y + 18, 5, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.fillStyle = 'rgba(255,255,255,0.85)';
-  ctx.fillText('REC', r.x + 28, r.y + 19);
-  const secs = Math.floor(t);
-  const tc = `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}:${String(Math.floor((t % 1) * 30)).padStart(2, '0')}`;
-  ctx.textAlign = 'right';
-  ctx.fillText(tc, r.x + r.w - 12, r.y + r.h - 16);
+  // Playhead.
+  const px = Math.round(xOf(p.now));
+  ctx.fillStyle = p.accent;
+  ctx.beginPath();
+  ctx.moveTo(px - 6, area.y); ctx.lineTo(px + 6, area.y); ctx.lineTo(px, area.y + 8); ctx.closePath();
+  ctx.fill();
+  ctx.shadowColor = p.accent;
+  ctx.shadowBlur = 8;
+  ctx.fillRect(px - 1, area.y, 2, area.h);
   ctx.restore();
 }
 
@@ -723,38 +483,21 @@ function getScanPattern(ctx: CanvasRenderingContext2D): CanvasPattern | null {
   return scanPattern;
 }
 
-/** Red copy nudged right, blue copy nudged left (additive, low alpha). */
-function drawChromaticFringe(ctx: CanvasRenderingContext2D, r: Rect, shift: number): void {
-  if (typeof document === 'undefined') return;
-  const m = ctx.getTransform();
-  const sx = r.x * m.a + m.e;
-  const sy = r.y * m.d + m.f;
-  const sw = Math.round(r.w * m.a);
-  const sh = Math.round(r.h * m.d);
-  if (sw <= 0 || sh <= 0) return;
-  if (!fringeCanvas) fringeCanvas = document.createElement('canvas');
-  if (fringeCanvas.width !== sw || fringeCanvas.height !== sh) {
-    fringeCanvas.width = sw;
-    fringeCanvas.height = sh;
+/** Cheap colour fringe: the window outline stroked again, red nudged right and blue nudged left (additive, low alpha). */
+function drawEdgeFringe(ctx: CanvasRenderingContext2D, win: Rect, shift: number): void {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.lineWidth = 2;
+  for (const [tint, dx] of [['rgba(255, 40, 40, 0.35)', shift], ['rgba(40, 80, 255, 0.35)', -shift]] as const) {
+    ctx.strokeStyle = tint;
+    rr(ctx, { x: win.x + dx, y: win.y, w: win.w, h: win.h }, 9);
+    ctx.stroke();
   }
-  const f = fringeCanvas.getContext('2d');
-  if (!f) return;
-  for (const [tint, dx] of [['#ff0000', shift], ['#0000ff', -shift]] as const) {
-    f.globalCompositeOperation = 'copy';
-    f.drawImage(ctx.canvas, sx, sy, sw, sh, 0, 0, sw, sh);
-    f.globalCompositeOperation = 'multiply';
-    f.fillStyle = tint;
-    f.fillRect(0, 0, sw, sh);
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.14;
-    ctx.drawImage(fringeCanvas, r.x + dx, r.y, r.w, r.h);
-    ctx.restore();
-  }
+  ctx.restore();
 }
 
-function drawCrtPass(ctx: CanvasRenderingContext2D, r: Rect, t: number, energy: number): void {
-  drawChromaticFringe(ctx, r, 2 + energy * 2);
+function drawCrtPass(ctx: CanvasRenderingContext2D, r: Rect, win: Rect, t: number, energy: number): void {
+  drawEdgeFringe(ctx, win, 1.5 + energy * 2);
 
   ctx.save();
   const pattern = getScanPattern(ctx);
@@ -800,7 +543,7 @@ export function drawAeroDesktop(ctx: CanvasRenderingContext2D, context: ModelDra
   const loop = duration > 0 ? duration : (midi?.duration || barLen * 4);
   const now = ((loopTime % loop) + loop) % loop;
   const energy = clamp01(((analysis?.bass ?? 0) * 0.6 + (analysis?.rms ?? 0) * 0.4) * (settings.audioSensitivity || 1));
-  // Audio view (or no MIDI) shows the single energy track instead of note clips
+  // Audio view (or no MIDI) shows the single energy band instead of the note flow
   const notes = context.albumView === 'midi' ? midi?.notes ?? NO_NOTES : NO_NOTES;
   const title = settings.title?.trim() || 'Untitled';
 
@@ -811,26 +554,20 @@ export function drawAeroDesktop(ctx: CanvasRenderingContext2D, context: ModelDra
 
   drawWallpaper(ctx, r, currentTime, energy);
 
-  const mainWin: Rect = { x: r.x + 18, y: r.y + 40, w: r.w - 36, h: Math.round(r.h * 0.62) };
-  const inner = drawGlassWindow(ctx, mainWin, `${title} - Playlist`, (x, y) => drawAppIcon(ctx, x, y));
-  drawPlaylist(ctx, inner, {
-    tracks: tracksFor(notes),
-    loop, now, barLen, bpm, title,
-    handle: settings.producerHandle || '',
+  // One large centred window filling most of the frame.
+  const winW = Math.round(r.w * 0.9);
+  const winH = Math.round(r.h * 0.84);
+  const win: Rect = { x: r.x + Math.round((r.w - winW) / 2), y: r.y + Math.round((r.h - winH) / 2), w: winW, h: winH };
+  const inner = drawGlassWindow(ctx, win, title, (x, y) => drawAppIcon(ctx, x, y));
+  drawWindowContent(ctx, inner, {
+    notes, loop, now, barLen, bpm,
     notesColor: settings.notesColor || '#7fd1ff',
     accent: '#ff3b2f',
     energy,
     isPlaying: currentTime > 0,
   }, analysis);
 
-  const camTop = mainWin.y + mainWin.h - 70;
-  const camWin: Rect = { x: r.x + r.w * 0.15, y: camTop, w: r.w * 0.68, h: r.y + r.h - camTop + 30 };
-  const handle = (settings.producerHandle || '').replace(/^@/, '');
-  const camInner = drawGlassWindow(ctx, camWin, `${handle || 'Producer'} Cam`, (x, y) => drawCamIcon(ctx, x, y));
-  drawCamToolbar(ctx, { x: camInner.x, y: camInner.y, w: camInner.w, h: 38 });
-  drawCamFeed(ctx, { x: camInner.x, y: camInner.y + 38, w: camInner.w, h: camInner.h - 38 }, currentTime, energy, analysis?.bass ?? 0);
-
-  drawCrtPass(ctx, r, currentTime, energy);
+  drawCrtPass(ctx, r, win, currentTime, energy);
   ctx.restore();
 }
 
