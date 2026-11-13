@@ -268,3 +268,68 @@ export function glowDot(ctx: CanvasRenderingContext2D, x: number, y: number, rad
   ctx.fillStyle = g;
   ctx.fillRect(x - rad, y - rad, rad * 2, rad * 2);
 }
+
+// ---------- smoke texture ----------
+
+let smokeTile: HTMLCanvasElement | null = null;
+export const SMOKE = 256;
+
+/** Seamless fractal value noise (4 octaves), 0–1, at integer pixel (x, y) of a `size` tile. Pure. */
+export function smokeValue(x: number, y: number, size = SMOKE, seed = 3): number {
+  let sum = 0;
+  let amp = 0.5;
+  let norm = 0;
+  for (let o = 0; o < 4; o++) {
+    const cells = 4 << o;
+    const cs = size / cells;
+    const gx = x / cs;
+    const gy = y / cs;
+    const x0 = Math.floor(gx);
+    const y0 = Math.floor(gy);
+    const fx = gx - x0;
+    const fy = gy - y0;
+    const sx = fx * fx * (3 - 2 * fx);
+    const sy = fy * fy * (3 - 2 * fy);
+    const v = (i: number, j: number) => hash01(((i % cells) + cells) % cells + (((j % cells) + cells) % cells) * 977 + o * 7919 + seed * 104729);
+    const a = v(x0, y0) + (v(x0 + 1, y0) - v(x0, y0)) * sx;
+    const b = v(x0, y0 + 1) + (v(x0 + 1, y0 + 1) - v(x0, y0 + 1)) * sx;
+    sum += (a + (b - a) * sy) * amp;
+    norm += amp;
+    amp *= 0.5;
+  }
+  return sum / norm;
+}
+
+/** Grey smoke tile (alpha = density), rendered once. */
+export function smokeCanvas(): HTMLCanvasElement | null {
+  if (smokeTile) return smokeTile;
+  const c = makeCanvas(SMOKE, SMOKE);
+  const g = c?.getContext('2d');
+  if (!c || !g) return null;
+  const img = g.createImageData(SMOKE, SMOKE);
+  for (let y = 0; y < SMOKE; y++)
+    for (let x = 0; x < SMOKE; x++) {
+      const v = smokeValue(x, y);
+      const d = Math.max(0, Math.min(1, (v - 0.32) / 0.5));
+      const i = (y * SMOKE + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = 255;
+      img.data[i + 3] = Math.round(d * d * 255);
+    }
+  g.putImageData(img, 0, 0);
+  smokeTile = c;
+  return c;
+}
+
+/** Tiles the smoke texture over `r` at `scale` px per tile, scrolled by (ox, oy) px. */
+export function smoke(ctx: CanvasRenderingContext2D, r: Rect, scale: number, ox: number, oy: number, alpha: number): void {
+  const tile = smokeCanvas();
+  if (!tile || alpha <= 0) return;
+  const s = scale;
+  const sx = ((ox % s) + s) % s;
+  const sy = ((oy % s) + s) % s;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  for (let y = r.y - sy; y < r.y + r.h; y += s)
+    for (let x = r.x - sx; x < r.x + r.w; x += s) ctx.drawImage(tile, x, y, s, s);
+  ctx.restore();
+}
