@@ -1,7 +1,7 @@
 # SampleScreen 🎛️⚡
 ### High-Impact Audio & MIDI Vertical Video Visualizer (1080×1920 @ 60 FPS)
 
-> A production-grade, highly optimized client-side competitor to loopvisualizer.app tailored for Instagram Reels, TikTok, and YouTube Shorts.
+> Drop a sample and its MIDI, pick a look, export a vertical video for Reels, TikTok and Shorts. Free, and everything runs in the browser.
 
 ---
 
@@ -63,266 +63,223 @@ All tasks move through the project board:
 
 ## 🚀 Quick Start
 
-The development server runs at:
 ```bash
-npm run dev
-# Open http://localhost:3000
+npm install
+npm run dev        # http://localhost:3000
 ```
 
-To build for production:
-```bash
-npm run build
-```
+The site has two pages:
 
-To access the **Developer Mockups Lab**:
+| Page | File | What it is |
+|---|---|---|
+| Landing | `index.html` | Short static page: what the tool does, live previews of every look, FAQ. Free, no account. |
+| App | `app.html` | The visualizer. Drop a WAV/MP3 and a MIDI file, pick a look, export. |
+
+Deep links into the app:
+
 ```text
-http://localhost:3000/#mockups
-# or deep-link to any model:
-http://localhost:3000/?model=take-care
-http://localhost:3000/?model=tz-lado-mau&waveform=true
+/app.html?model=take-care          open a mode by id (folder name under src/modes/)
+/app.html?model=linear&palette=atelier-paper
+/app.html?model=tz-lado-mau&view=waveform    album in its Audio view
+/app.html?trim=1                   open the trim editor
+```
+
+Old links of the form `/?model=<id>` are redirected from the landing page to the app.
+
+Commands:
+
+```bash
+npx tsc --noEmit   # type check
+npm test           # unit tests (esbuild + node --test)
+npm run build      # tsc + vite build → dist/index.html and dist/app.html
 ```
 
 ---
 
 ## 🛠️ Architecture & Tech Stack
 
-- **Core**: Vite + React 19 + TypeScript + Tailwind CSS
-- **Audio Processing**: Web Audio API (`AudioContext`, `AnalyserNode` with 2048 FFT, Bass/Mid/Treble extraction, RMS calculation, and offline channel analysis)
-- **MIDI Engine**: `@tonejs/midi` (note extraction, pitch mapping, automatic BPM and Key signature detection)
-- **Visual Engine**: HTML5 Canvas running at native internal **1080×1920 resolution** with a deterministic frame-by-frame render clock
-- **Export Engine**: Client-side browser export using **WebCodecs API** (`VideoEncoder` + `AudioEncoder`) with **mp4-muxer** (producing zero-frame-drop 1080×1920 @ 60 FPS MP4 with synchronized AAC audio) and universal `MediaRecorder` fallback. Zero server or cloud rendering costs.
-- **In-Browser Beat Trimmer**: Mathematical bar-based sample slicing with BPM synchronization (`(60 / BPM) * 4` seconds per bar) allowing producers to crop and loop audio directly in the browser without opening a DAW.
+- **Core**: Vite 6 (two-page build) + React 19 + TypeScript + Tailwind CSS 3. The landing page is plain HTML/CSS/TS, without React.
+- **Audio**: Web Audio API (`AnalyserNode`, bass / mid / treble / RMS, offline analysis for export).
+- **MIDI**: `@tonejs/midi`.
+- **Canvas**: 1080×1920 internal resolution, deterministic frame clock.
+- **Export**: WebCodecs (`VideoEncoder` + `AudioEncoder`) with `mp4-muxer` → H.264 MP4 at 60 fps with AAC audio (Opus on Firefox). Browsers without WebCodecs fall back to a real-time `MediaRecorder` capture, which may produce WebM. Everything runs in the browser; nothing is uploaded.
+
+```text
+src/
+  App.tsx                  app state and wiring
+  tokens.css               colour tokens, shared by the app and the landing page
+  components/              Header, Dropzone, CanvasPreview, PlaybackControls, ExportModal
+    sidebar/               01 Look · 02 Time · 03 Export
+    trim/                  trim editor (waveform, ruler, overview)
+  core/                    pure logic with tests: trim, timeline, mode resolution, defaults
+  engine/                  renderer, exporter, audio, midi, chords, palettes, module loader
+  hardware/                consoles drawn in slot 1 (lazy-loaded)
+  modes/
+    registry.ts            discovers every folder below; no manual registration
+    standalone/<id>/       linear, circular, orbital-moon, aureola
+    albums/<id>/           take-care, tz-lado-mau, astroworld, pnd-two
+    albums/_shell/         layout, keyboard, waterfall and drawing helpers shared by albums
+  landing/                 landing page styles, card builder and live previews
+  shared/                  canvas utilities, image cache
+tests/                     unit tests
+```
+
+### Design system
+
+One theme, Dark Studio (walnut), with a single accent, amber `#e69d45`. The tokens are CSS variables in `src/tokens.css`, exposed to Tailwind in `tailwind.config.js` (`bg-surface-1`, `text-muted`, `border-line`, `bg-accent`…). Use the tokens; do not add raw Tailwind palette colours (`amber-*`, `zinc-*`) or hex values to components. All user-facing text is in English.
 
 ---
 
-## 📐 Canvas Coordinate Architecture & The Two Protected Slots
-
-The Canvas runs at internal native **1080×1920 resolution** (9:16 vertical video ratio). To guarantee that multiple developers and AI agents can build without breaking each other's work or overlapping pixels, the canvas is split into strict, immutable vertical zones:
+## 📐 Canvas Layout: Two Slots
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────┐
-│  HEADER BAR (y: 0 to 195)                                              │
-│  Track Title · BPM · Key · Producer Handle · Loop Bar Counter          │
+│  HEADER (y: 0 to 195)                                                  │
+│  Title · BPM · Key · Signature · Bar counter                           │
 ├────────────────────────────────────────────────────────────────────────┤
-│  🎛️ SLOT 1: HARDWARE SYNTHESIZER CONSOLE                              │
-│  Bounding Box: x = 60, y = 195, width = 960, height = 570              │
-│  • Dispatched dynamically via `src/hardware/registry.ts`               │
-│  • Primary flagship: ST 909 Triple VCO Console (Crimson or Real Gold) │
+│  SLOT 1: HARDWARE CONSOLE                                              │
+│  x = 60, y = 195, width = 960, height = 570                            │
+│  loaded through src/hardware/registry.ts                               │
 ├────────────────────────────────────────────────────────────────────────┤
-│  [ Fixed Separation Gap: y = 765 to 795 (30px) ]                       │
+│  gap: y = 765 to 795                                                   │
 ├────────────────────────────────────────────────────────────────────────┤
-│  🎨 SLOT 2: ACTIVE VISUAL MODEL CARD                                   │
-│  Bounding Box: x = 60, y = 795, width = 960, height = 670              │
-│  • Dispatched dynamically via `src/models/registry.ts`                 │
-│  • Supports Dual Mode: MIDI Piano Roll vs Pure Audio Waveform          │
+│  SLOT 2: MODE CARD                                                     │
+│  x = 60, y = 795, width = 960, height = 670                            │
+│  loaded through src/modes/registry.ts                                  │
 ├────────────────────────────────────────────────────────────────────────┤
-│  BOTTOM BAR & TELEMETRY (y: 1465 to 1920)                              │
-│  Active Playing Notes · Chord Detection · Bar Dashes · Watermark       │
+│  BOTTOM (y: 1465 to 1920)                                              │
+│  Active notes · Chord · Bar dashes · Watermark                         │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
 > [!CAUTION]
-> **The Golden Rule for Visual Model & Hardware Contributors:**
-> **NEVER** hardcode model-specific visual elements or conditional branching inside `src/engine/renderer.ts`, `src/engine/exporter.ts`, or `src/engine/audio.ts`. All visual models and hardware synthesizers must live isolated inside `src/models/` or `src/hardware/`, conform to their designated bounding box slot, and be registered via their respective registry.
+> **Never** add mode-specific or hardware-specific branches to `src/engine/renderer.ts`, `src/engine/exporter.ts` or `src/engine/audio.ts`. A mode lives in its own folder under `src/modes/`, a console in its own file under `src/hardware/`, and each draws only inside its slot.
+
+### Modes: two kinds
+
+| Kind | Medium | Colours |
+|---|---|---|
+| `standalone` | One medium, declared by `input` in the manifest: `'midi'` (linear, circular, orbital-moon) or `'audio'` (aureola). | The user's palette: Walnut, Paper, Receipt or Riso (`src/engine/palettes.ts`). |
+| `album` | Two views, switched in the sidebar: **MIDI** (falling notes and keys) and **Audio** (full-stage waveform; the console becomes the tape machine). Without a MIDI file only the Audio view is available. | The palette in the album's manifest. |
+
+Light palettes (Paper, Receipt, Riso) follow extra rules: no radial glow, no `shadowBlur`, round line caps, and all text uses `settings.inkColor`. Use `isLightTone(settings)` from `engine/palettes.ts` and never hardcode white or near-black for text and strokes in a standalone mode.
 
 ---
 
-## ✂️ In-Browser Beat Trimmer (BPM Snapped)
+## ✂️ Trim Editor
 
-When producers upload a full beat or sample, they do not need to open FL Studio, Ableton, or Logic to crop it. The site features a built-in mathematical bar trimmer:
-- **BPM-Snapped Calculations**: Slices audio precisely to bar boundaries based on `(60 / BPM) * 4`.
-- **Start Bar Selection**: Pick the starting bar (Bar 1, 5, 9, 13, 17, 25, 33...) via range slider or numeric stepper.
-- **Loop Length Presets**: Select 4, 8, 12, or 16 bars.
-- **Slice Preview**: Displays exact time range (`00:16.0 → 00:32.0 (16.0s)`).
-- **Instant Non-Destructive Slicing**: Slices the memory buffer, updates playback timeline, loops, and exports at 60 FPS with zero re-rendering delays. Original audio is preserved for one-click resets.
+Open **Trim** in the sidebar (section 02 Time) once an audio file is loaded. A panel docks above the transport:
+
+- Bar ruler, beat grid when zoomed in, playhead.
+- Drag the handles to resize, drag inside to move, drag outside to draw a new selection.
+- 4 / 8 / 16 bar presets. The start snaps to the bar or the beat; the length is always whole bars (`(60 / BPM) * 4` seconds each).
+- Changing the BPM re-fits the selection to the new grid.
+- Zoom with the buttons, a pinch or Ctrl + scroll; the overview strip pans.
+- Undo, redo and Reset. Audio and MIDI are cut together and the original is kept.
+
+The maths is in `src/core/trim.ts` and is covered by `tests/trim.test.ts`.
 
 ---
 
-## 👩‍💻 Developer Guide: How to Create a New Visual Model (in 3 Steps)
+## 👩‍💻 How to Add a Mode
 
-Visual models render inside **Slot 2** (`x = 60, y = 795, width = 960, height = 670`).
+A mode is a folder with two files. The registry finds it by itself; nothing else needs editing.
 
-### Step 1: Create your isolated model directory
-Create a new folder in `src/models/<your-model-name>/`:
 ```bash
-mkdir src/models/my-new-visual/
-touch src/models/my-new-visual/index.ts
+mkdir src/modes/standalone/my-mode      # or src/modes/albums/my-album
 ```
 
-### Step 2: Implement the `ModelDrawFn` contract
-In `src/models/my-new-visual/index.ts`, export your drawing function matching `ModelDrawFn`:
+**`manifest.ts`** (small, loaded up front; the `id` must equal the folder name):
 
 ```typescript
-import { ModelDrawContext } from '../../types';
-import { roundRect } from '../../shared/canvas-utils';
-import { drawMirroredSpectrumBars } from '../../shared/waveform-engine';
-import { formatNoteName } from '../../engine/chords';
+import { ModeManifest } from '../../../types';
 
-export function drawMyNewVisualModel(ctx: CanvasRenderingContext2D, context: ModelDrawContext) {
-  const { region, currentTime, duration, midi, activeNotes, analysis, settings, isWaveformMode } = context;
-  const { x, y, width: w, height: h, centerX, centerY } = region;
-
-  ctx.save();
-
-  // 1. Draw your container / glass box inside the given region (x, y, w, h)
-  ctx.fillStyle = 'rgba(10, 12, 16, 0.85)';
-  roundRect(ctx, x, y, w, h, 16, true, false);
-
-  if (isWaveformMode) {
-    // -------------------------------------------------------------
-    // Pure Audio / Waveform View (When user has no MIDI file loaded)
-    // -------------------------------------------------------------
-    drawMirroredSpectrumBars(
-      ctx,
-      x + 24,
-      centerY,
-      w - 48,
-      h * 0.4,
-      analysis.fft,
-      48,
-      3,
-      settings.accentColor || '#f59e0b',
-      settings.notesColor || '#eab308'
-    );
-  } else {
-    // -------------------------------------------------------------
-    // MIDI / Piano Roll View (When MIDI notes exist)
-    // -------------------------------------------------------------
-    activeNotes.forEach(note => {
-      // Draw reactive particles, rings, or visual elements here
-    });
-
-    // Optional: Draw note name tags if settings.noteNameTags !== false
-    if (settings.noteNameTags !== false && activeNotes.length > 0) {
-      activeNotes.forEach(note => {
-        const name = formatNoteName(note.midi, settings.accidental, settings.middleC);
-        // Render note badge...
-      });
-    }
-  }
-
-  ctx.restore();
-}
-```
-
-### Step 3: Register in `src/models/registry.ts`
-Add entries to `src/models/registry.ts`:
-
-```typescript
-// 1. Import your function
-import { drawMyNewVisualModel } from './my-new-visual';
-
-// 2. Add to MODEL_REGISTRY
-export const MODEL_REGISTRY: Record<string, ModelDrawFn> = {
-  // ... existing models
-  'my-new-visual': drawMyNewVisualModel,
+const manifest: ModeManifest = {
+  id: 'my-mode',
+  name: 'My Mode',
+  kind: 'standalone',            // or 'album'
+  input: 'midi',                 // or 'audio'
+  description: 'One line shown in the sidebar and on the landing page.',
+  // Albums only:
+  // palette: { notesColor, circleColor, bgColor, accentColor, glowColor, inkColor? },
+  // synthTheme: 'gold',                       // console skin, default 'crimson'
+  // defaults: { title: 'MY ALBUM', bpm: 90 }, // applied on first load via ?model=
+  // Optional for any mode:
+  // hardware: 'tape-machine',                 // force a console
 };
 
-// 3. Add to VISUAL_MODELS_MANIFEST
-export const VISUAL_MODELS_MANIFEST: VisualModelManifest[] = [
-  // ... existing manifests
-  {
-    id: 'my-new-visual',
-    name: 'My New Visual',
-    category: 'creative',
-    description: 'High-impact reactive visualizer with dual waveform support.',
-    tag: 'NEW RELEASE',
-  },
-];
-```
-🎉 **Done!** The Customization Sidebar will automatically display your new model with zero changes required to any other files.
-
----
-
-## 🎛️ Developer Guide: How to Create a New Hardware Synthesizer (in 3 Steps)
-
-Hardware synthesizers render inside **Slot 1** (`x = 60, y = 195, width = 960, height = 570`).
-
-### Step 1: Create your isolated synth file
-Create a new file in `src/hardware/`:
-```bash
-touch src/hardware/my-custom-synth.ts
+export default manifest;
 ```
 
-### Step 2: Implement your drawing function
-In `src/hardware/my-custom-synth.ts`, implement your hardware faceplate and keyboard inside the specified bounding box:
+**`index.ts`** (loaded on demand as its own chunk):
 
 ```typescript
-import { SynthDrawContext } from '../types';
-import { roundRect } from '../shared/canvas-utils';
-import { drawPianoKeyboard } from './keyboard-engine';
+import { ModelDrawContext, ModeModule } from '../../../types';
+import { DEFAULT_INK, hexToRgbaStr, isLightTone } from '../../../engine/palettes';
 
-export function drawMyCustomSynth(ctx: CanvasRenderingContext2D, context: SynthDrawContext) {
-  const { region, currentTime, midi, activeNotes, analysis, settings } = context;
+function draw(ctx: CanvasRenderingContext2D, context: ModelDrawContext) {
+  const { region, loopTime, duration, midi, activeNotes, analysis, settings } = context;
   const { x, y, width: w, height: h } = region;
+  const light = isLightTone(settings);
+  const ink = settings.inkColor || DEFAULT_INK;
 
   ctx.save();
-
-  // 1. Synth Outer Chassis (Beveled Wood / Metal cheeks)
-  ctx.fillStyle = '#1e1b18';
-  roundRect(ctx, x, y, w, h, 8, true, true);
-
-  // 2. Faceplate Modules (Oscillators, Knobs, CRT Scope)
-  // ... Draw your hardware knobs, LED segment displays, etc.
-
-  // 3. Built-in Piano Keyboard (Bottom of the console)
-  const keyH = 150;
-  const keyY = y + h - keyH - 12;
-  drawPianoKeyboard(ctx, x + 24, keyY, w - 48, keyH, activeNotes, {
-    skin: 'modern-synth',
-    activeColor: settings.notesColor || '#f59e0b',
-  });
-
+  ctx.strokeStyle = hexToRgbaStr(ink, 0.25);
+  ctx.strokeRect(x, y, w, h);
+  // ... draw inside (x, y, w, h) only; skip shadowBlur when `light`
   ctx.restore();
 }
+
+export default { draw } satisfies ModeModule;
 ```
 
-### Step 3: Register in `src/hardware/registry.ts`
-Register your synthesizer in `src/hardware/registry.ts`:
+For an album, read `context.albumView` (`'midi'` or `'waveform'`) and reuse the helpers in `src/modes/albums/_shell/`:
 
-```typescript
-import { drawMyCustomSynth } from './my-custom-synth';
+| File | What it gives you |
+|---|---|
+| `layout.ts` | `computeAlbumLayout`: room on top, waterfall, keyboard |
+| `keyboard.ts` | `computeKeyboardGeometry`: key positions for the MIDI's pitch range |
+| `waterfall.ts` | `visibleNotes` (loop-aware), `albumEnergy` (tempo + level, 0 to 1), `optionalCover`, `hash01` |
+| `draw.ts` | `noteRect`, `drawAlbumKeys` (themable keys), `scopePoints`, `strokeSmooth` |
 
-// 1. Add to SYNTH_REGISTRY
-export const SYNTH_REGISTRY: Record<string, SynthDrawFn> = {
-  // ... existing synths
-  'my-custom-synth': drawMyCustomSynth,
-};
+`pnd-two` and `astroworld` are short examples built on these helpers. An album's images go in its own `assets/` folder; a file named `cover.jpg` (or `.png` / `.webp`) is picked up by `optionalCover`.
 
-// 2. Add to SYNTHS_MANIFEST
-export const SYNTHS_MANIFEST: SynthManifest[] = [
-  // ... existing manifests
-  {
-    id: 'my-custom-synth',
-    name: 'Moog Modular 2026',
-    tag: 'ANALOG PRO',
-    description: 'Custom vintage chassis with glowing vu-meters and 25-key keyboard.',
-  },
-];
-```
-🎉 **Done!** You can test it by passing `synthModel: 'my-custom-synth'` or viewing it in the Developer Mockups Lab.
+The new mode then shows up in the sidebar and on the landing page, with a live preview, and opens at `/app.html?model=my-mode`.
 
 ---
 
-## 🔒 Rules of Code Isolation & Asset Management
+## 🎛️ How to Add a Hardware Console
 
-To maintain a clean codebase where multiple contributors and agents work concurrently:
+Consoles draw in slot 1 (`x = 60, y = 195, width = 960, height = 570`).
 
-1. **Shared Primitives Only from `src/shared/`**:
-   - `src/shared/canvas-utils.ts` – Pure canvas geometry (e.g., `roundRect`).
-   - `src/shared/waveform-engine.ts` – Standard audio visualization beams, spectrum bars, and scopes.
-   - `src/hardware/keyboard-engine.ts` – Standard piano keyboard layout calculations.
-   - `src/engine/chords.ts` – Standard note formatting (`formatNoteName`) and chord detection (`detectChord`).
-   - **Never import internal helper functions directly from another model's directory or another synth's file.**
+1. Create `src/hardware/my-synth.ts` and export a draw function that stays inside the region it is given. `drawPianoKeyboard` from `keyboard-engine.ts` draws the keys.
+2. Register it in `src/hardware/registry.ts`, in both tables:
 
-2. **Asset Caching Rule (60 FPS Performance)**:
-   - Place all images (`.jpg`, `.png`, `.webp`) in `public/images/` (runtime images loaded by the app).
-   - Always load images **outside the canvas render loop** (memoized / lazy-loaded once).
-   - Never call `new Image()` inside a function called on every animation frame, as this will trigger severe garbage-collection stuttering.
+```typescript
+export const HARDWARE_LOADERS: Record<string, () => Promise<HardwareModule>> = {
+  // ...
+  'my-synth': () => import('./my-synth').then(m => ({
+    draw: (ctx, { region: r, currentTime, midi, activeNotes, analysis, settings, theme }) =>
+      m.drawMySynth(ctx, r.x, r.y, r.width, r.height, currentTime, midi, activeNotes, analysis, settings, theme),
+  })),
+};
 
-3. **No Dynamic Layout Mutations**:
-   - Do not adjust global variables, canvas dimensions (`1080×1920`), or the heights of adjacent slots.
-   - Always stay strictly within `region.x`, `region.y`, `region.width`, and `region.height`.
+export const SYNTHS_MANIFEST: SynthManifest[] = [
+  // ...
+  { id: 'my-synth', name: 'My Synth', tag: 'ANALOG', description: 'One line about it.' },
+];
+```
+
+A mode can force it with `hardware: 'my-synth'` in its manifest; otherwise the default console is the ST 909, and albums in the Audio view use the tape machine.
+
+---
+
+## 🔒 Rules of Code Isolation & Assets
+
+1. **Shared code comes from shared places**: `src/shared/` (canvas utilities, image cache), `src/engine/chords.ts` (`formatNoteName`, `detectChord`), `src/engine/palettes.ts`, `src/hardware/keyboard-engine.ts`, and `src/modes/albums/_shell/` for albums. Never import from another mode's folder or another console's file.
+2. **Images**: an album's images live in `src/modes/albums/<id>/assets/`; images used by hardware live in `public/images/`. Load them through `getCachedImage` (`src/shared/assets.ts`), never with `new Image()` inside a draw function.
+3. **Frame cost**: no `shadowBlur` or gradient creation inside per-note or per-particle loops; draw a wider, fainter shape for a halo instead. Use deterministic values (`hash01`) rather than `Math.random()` so the preview and the export match.
+4. **Layout**: do not change the canvas size or the slot heights. Stay inside `region`.
 
 ---
 
@@ -335,7 +292,7 @@ To enforce this protection policy on the GitHub web interface:
 3. Set **Branch name pattern** to `main`.
 4. Enable the following protections:
    - ✅ **Require a pull request before merging** (Require 1 approval).
-   - ✅ **Require status checks to pass before merging** (Search and select the `Type Check & Production Build` check from our GitHub Actions workflow).
+   - ✅ **Require status checks to pass before merging** (Search and select the `Type Check, Test & Build` check from our GitHub Actions workflow).
    - ✅ **Require branches to be up to date before merging**.
    - ✅ **Require conversation resolution before merging**.
    - ✅ **Do not allow bypassing the above settings** (or restrict bypass to Repository Admin only).
@@ -345,14 +302,13 @@ To enforce this protection policy on the GitHub web interface:
 
 ## 🧪 Verification & Testing
 
-Always verify your changes before submitting:
+Before opening a pull request:
+
 ```bash
-# 1. Check TypeScript and Vite build
+npx tsc --noEmit
+npm test
 npm run build
-
-# 2. Test in the browser
-npm run dev
-
-# 3. Open the Secret Mockups Lab to verify your model card
-http://localhost:3000/#mockups
+npm run dev        # then check your mode at /app.html?model=<id>, and the landing page at /
 ```
+
+For a standalone mode, check all four palettes (`&palette=studio-walnut`, `atelier-paper`, `thermal-receipt`, `risograph`). For an album, check both views. Export once in Chrome and look at the `[SampleScreen] Export timing` line in the console.
