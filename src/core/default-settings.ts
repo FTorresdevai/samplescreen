@@ -21,7 +21,7 @@ export const DEFAULT_SETTINGS: VisualizerSettings = {
   fitReelsSafeZone: false,
 
   modeId: DEFAULT_MODE_ID,
-  loopBars: 10,
+  loopBars: 16,           // matches the 16-bar demo loaded on start (must be one of the 4/8/16 options)
   noteNameTags: false, // retired option, kept off
   showProgressDashes: false,
 
