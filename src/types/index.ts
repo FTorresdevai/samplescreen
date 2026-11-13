@@ -142,6 +142,7 @@ export interface ModeManifest {
   hardware?: string;           // forces this hardware id (ignores settings.synthModel)
   fullFrame?: boolean;         // standalone: no console; the mode fills header → notes row
   waveformHardware?: string;   // albums: hardware in 'waveform' view (default 'tape-machine')
+  bannerFocus?: { x: number; y: number }; // albums: which part of the banner stays visible when it fills the frame (0 = left/top, 0.5 = centre, 1 = right/bottom)
   palette?: Pick<VisualizerSettings, 'notesColor' | 'circleColor' | 'bgColor' | 'accentColor' | 'glowColor'> & { inkColor?: string }; // albums only
   synthTheme?: SynthTheme;     // default 'crimson'
   defaults?: Partial<Pick<VisualizerSettings, 'title' | 'bpm' | 'key' | 'synthModel'>>; // applied on first load only

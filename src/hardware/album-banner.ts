@@ -2,6 +2,7 @@ import { SynthDrawContext } from '../types';
 import { roundRect } from '../shared/canvas-utils';
 import { consoleTheme } from './themes';
 import { getCachedImage } from '../shared/assets';
+import { getManifest } from '../modes/registry';
 
 // Discover banner images in any album folder (either root `banner.*` or `assets/banner.*`)
 const bannerGlob = import.meta.glob<string>(
@@ -61,21 +62,23 @@ export function drawAlbumBanner(ctx: CanvasRenderingContext2D, context: SynthDra
   ctx.fillRect(x + 2, y + 2, w - 4, h - 4);
 
   if (img && img.complete && img.naturalWidth > 0) {
-    const imgAspect = img.naturalWidth / img.naturalHeight;
-    const targetAspect = (w - 4) / (h - 4);
-    let sx = 0, sy = 0, sw = img.naturalWidth, sh = img.naturalHeight;
-
-    if (imgAspect > targetAspect) {
-      sw = img.naturalHeight * targetAspect;
-      sx = (img.naturalWidth - sw) / 2;
-    } else {
-      sh = img.naturalWidth / targetAspect;
-      sy = (img.naturalHeight - sh) / 2;
-    }
-
+    const fx = x + 2, fy = y + 2, fw = w - 4, fh = h - 4;
+    const targetAspect = fw / fh;
+    const focus = getManifest(settings.modeId).bannerFocus ?? { x: 0.5, y: 0.5 };
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(img, sx, sy, sw, sh, x + 2, y + 2, w - 4, h - 4);
+
+    // Cover the frame; the focus point decides which part of the overflow is kept.
+    const imgAspect = img.naturalWidth / img.naturalHeight;
+    let sx = 0, sy = 0, sw = img.naturalWidth, sh = img.naturalHeight;
+    if (imgAspect > targetAspect) {
+      sw = img.naturalHeight * targetAspect;
+      sx = (img.naturalWidth - sw) * focus.x;
+    } else {
+      sh = img.naturalWidth / targetAspect;
+      sy = (img.naturalHeight - sh) * focus.y;
+    }
+    ctx.drawImage(img, sx, sy, sw, sh, fx, fy, fw, fh);
 
     // Warm cinematic vignette overlay to blend into the studio dark UI
     const vignette = ctx.createLinearGradient(x, y, x, y + h);
