@@ -5,7 +5,7 @@ const manifest: ModeManifest = {
   id: 'astroworld',
   name: 'Travis Scott "ASTROWORLD"',
   kind: 'album',
-  input: 'midi',
+  input: 'both',
   description: 'Gold notes under a night sky; the wheel lights chase and sparks fly at speed.',
   palette: { notesColor: '#f6c453', circleColor: '#2a2140', bgColor: '#070b1f', accentColor: '#ffe9a8', glowColor: '#ff9d2e' },
   synthTheme: 'brass',

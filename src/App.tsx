@@ -15,7 +15,9 @@ import { validateAudioFile, validateMidiFile, sanitizeText } from './core/valida
 import { parseSampleFileName } from './core/sample-parser';
 import { DEFAULT_MODE_ID, findManifest } from './modes/registry';
 import { DEFAULT_SETTINGS } from './core/default-settings';
-import { applyMode } from './core/mode-resolution';
+import { applyMode, exportBlockReason, hasViewSwitch } from './core/mode-resolution';
+import { TrackFields } from './components/TrackFields';
+import { ViewSwitch } from './components/ui';
 
 export const App: React.FC = () => {
   // References
@@ -380,7 +382,13 @@ export const App: React.FC = () => {
     };
   }, [exportDownloadUrl]);
 
+  // Per-mode input rules: MIDI-only modes need a loaded MIDI file; 'both' modes get the view switch
+  const activeManifest = findManifest(settings.modeId);
+  const hasMidiNotes = midiData.notes.length > 0;
+  const exportBlock = activeManifest ? exportBlockReason(activeManifest, midiSource === 'file' && hasMidiNotes) : null;
+
   const handleStartExport = async () => {
+    if (exportBlock) return;
     if (!canvasRef.current || !rendererRef.current) {
       console.warn('Canvas or Renderer not ready for export');
       return;
@@ -467,6 +475,10 @@ export const App: React.FC = () => {
         isExporting={isExporting}
         isSidebarOpen={isSidebarOpen}
         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+        exportBlockReason={exportBlock}
+        viewSwitch={activeManifest && hasViewSwitch(activeManifest)
+          ? <ViewSwitch settings={settings} onUpdate={handleUpdateSettings} hasMidi={hasMidiNotes} />
+          : undefined}
       />
 
       {/* Main Studio Workspace */}
@@ -477,7 +489,9 @@ export const App: React.FC = () => {
           
           {/* First screen: large dropzone beside the demo preview. With a file loaded it shrinks to a strip. */}
           <div className={`flex-1 min-h-0 flex flex-col ${isDemo ? 'lg:flex-row' : ''}`}>
-            <div className={isDemo ? 'shrink-0 lg:w-[24rem] flex items-center p-4 lg:p-8 lg:pr-0' : 'shrink-0 p-2.5 border-b border-line bg-surface-1'}>
+            <div className={isDemo ? 'shrink-0 lg:w-[24rem] flex flex-col justify-center gap-4 p-4 lg:p-8 lg:pr-0' : 'shrink-0 p-2.5 space-y-2.5 border-b border-line bg-surface-1'}>
+              {/* Title, key, BPM and producer sit right above the drop zone so they can be set first */}
+              <TrackFields settings={settings} onUpdate={handleUpdateSettings} compact={!isDemo} />
               <Dropzone
                 onFilesSelected={handleFilesSelected}
                 isDemo={isDemo}
@@ -531,6 +545,7 @@ export const App: React.FC = () => {
           onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
           onExport={handleStartExport}
           isExporting={isExporting}
+          exportBlockReason={exportBlock}
           introMidiFileName={introMidiFileName}
           onIntroMidiSelected={handleIntroMidiSelected}
           onLoadDemoIntro={handleLoadDemoIntro}

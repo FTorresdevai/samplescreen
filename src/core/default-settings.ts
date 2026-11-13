@@ -22,8 +22,8 @@ export const DEFAULT_SETTINGS: VisualizerSettings = {
 
   modeId: DEFAULT_MODE_ID,
   loopBars: 10,
-  noteNameTags: true,
-  showProgressDashes: true,
+  noteNameTags: false, // retired option, kept off
+  showProgressDashes: false,
 
   accidental: 'sharp',
   middleC: 3,

@@ -12,6 +12,7 @@ interface SidebarProps {
   onToggle: () => void;
   onExport: () => void;
   isExporting?: boolean;
+  exportBlockReason?: string | null; // shown under the Export button, which stays disabled
   midiData?: ParsedMidi | null;
   audioDuration?: number;
   isTrimOpen?: boolean;
@@ -26,7 +27,7 @@ const MIN_WIDTH = 300;
 const MAX_WIDTH = 560;
 
 /** Controls in three acts (01 Look, 02 Time, 03 Export) with Export pinned at the bottom. */
-export const Sidebar: React.FC<SidebarProps> = ({ settings, onUpdate, isOpen, onToggle, onExport, isExporting, midiData, ...time }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ settings, onUpdate, isOpen, onToggle, onExport, isExporting, exportBlockReason, midiData, ...time }) => {
   const [width, setWidth] = useState(360);
   const dragRef = useRef<{ x: number; width: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -87,7 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ settings, onUpdate, isOpen, on
         <ExportSection settings={settings} onUpdate={onUpdate} />
       </div>
 
-      <ExportBar settings={settings} onUpdate={onUpdate} onExport={onExport} disabled={isExporting} />
+      <ExportBar settings={settings} onUpdate={onUpdate} onExport={onExport} disabled={isExporting} blockReason={exportBlockReason} />
     </aside>
   );
 };

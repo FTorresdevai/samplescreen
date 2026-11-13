@@ -43,25 +43,28 @@ export const ExportSection: React.FC<ExportProps> = ({ settings, onUpdate }) => 
 );
 
 /** Pinned footer: the single primary action of the screen. */
-export const ExportBar: React.FC<ExportProps & { onExport: () => void; disabled?: boolean }> = ({ settings, onUpdate, onExport, disabled }) => (
-  <div className="flex items-center gap-2 p-3 border-t border-line bg-surface-1">
-    <button
-      type="button"
-      onClick={onExport}
-      disabled={disabled}
-      className="flex-1 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-ink transition-colors hover:bg-accent/90 disabled:bg-surface-2 disabled:text-subtle"
-    >
-      Export video
-    </button>
-    <select
-      value={settings.exportLoops}
-      onChange={(e) => onUpdate({ exportLoops: parseInt(e.target.value) as 1 | 2 | 4 })}
-      className={`${inputCls} !w-auto font-mono py-2.5 cursor-pointer`}
-      aria-label="Loops to export"
-    >
-      <option value={1}>1 loop</option>
-      <option value={2}>2 loops</option>
-      <option value={4}>4 loops</option>
-    </select>
+export const ExportBar: React.FC<ExportProps & { onExport: () => void; disabled?: boolean; blockReason?: string | null }> = ({ settings, onUpdate, onExport, disabled, blockReason }) => (
+  <div className="p-3 border-t border-line bg-surface-1">
+    {blockReason && <p className="mb-2 text-[11px] text-muted" role="status">{blockReason}</p>}
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={onExport}
+        disabled={disabled || !!blockReason}
+        className="flex-1 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-ink transition-colors hover:bg-accent/90 disabled:bg-surface-2 disabled:text-subtle"
+      >
+        Export video
+      </button>
+      <select
+        value={settings.exportLoops}
+        onChange={(e) => onUpdate({ exportLoops: parseInt(e.target.value) as 1 | 2 | 4 })}
+        className={`${inputCls} !w-auto font-mono py-2.5 cursor-pointer`}
+        aria-label="Loops to export"
+      >
+        <option value={1}>1 loop</option>
+        <option value={2}>2 loops</option>
+        <option value={4}>4 loops</option>
+      </select>
+    </div>
   </div>
 );

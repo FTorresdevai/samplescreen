@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import { applyMode, resolveAlbumView, resolveHardwareId, resolveSynthTheme, showsMidi } from '../src/core/mode-resolution.ts';
+import { applyMode, exportBlockReason, hasViewSwitch, resolveAlbumView, resolveHardwareId, resolveSynthTheme, showsMidi } from '../src/core/mode-resolution.ts';
 import { ModeManifest, VisualizerSettings } from '../src/types/index.ts';
 
 const album: ModeManifest = {
-  id: 'album-x', name: 'Album X', kind: 'album', input: 'midi', description: '',
+  id: 'album-x', name: 'Album X', kind: 'album', input: 'both', description: '',
   palette: { notesColor: '#111111', circleColor: '#222222', bgColor: '#333333', accentColor: '#444444', glowColor: '#555555' },
   synthTheme: 'gold',
 };
@@ -40,6 +40,22 @@ test('Mode resolution: notes row follows what the frame shows', () => {
   assert.strictEqual(showsMidi(album, s({}), false), false);
   assert.strictEqual(showsMidi(standalone, s({ albumView: 'waveform' }), true), true);
   assert.strictEqual(showsMidi(audioOnly, s({}), true), false);
+});
+
+test('Mode resolution: input rules (view switch, MIDI-only export block)', () => {
+  const both: ModeManifest = { ...standalone, id: 'both', input: 'both' };
+  assert.strictEqual(hasViewSwitch(album), true);
+  assert.strictEqual(hasViewSwitch(both), true);
+  assert.strictEqual(hasViewSwitch(standalone), false);
+  assert.strictEqual(hasViewSwitch(audioOnly), false);
+  // A standalone 'both' mode follows the view like an album
+  assert.strictEqual(showsMidi(both, s({ albumView: 'waveform' }), true), false);
+  assert.strictEqual(resolveHardwareId(both, s({ albumView: 'waveform' }), true), 'tape-machine');
+  // Only MIDI-only modes need a loaded MIDI file to export
+  assert.ok(exportBlockReason(standalone, false));
+  assert.strictEqual(exportBlockReason(standalone, true), null);
+  assert.strictEqual(exportBlockReason(album, false), null);
+  assert.strictEqual(exportBlockReason(audioOnly, false), null);
 });
 
 test('Mode resolution: synth theme and applyMode palette', () => {

@@ -1,9 +1,11 @@
 import React from 'react';
-import { AlbumView, ModeManifest, ParsedMidi, VisualizerSettings } from '../../types';
+import { ModeInput, ModeManifest, ParsedMidi, VisualizerSettings } from '../../types';
 import { MODE_MANIFESTS, findManifest } from '../../modes/registry';
-import { applyMode } from '../../core/mode-resolution';
+import { applyMode, hasViewSwitch } from '../../core/mode-resolution';
 import { PALETTES, paletteSettings } from '../../engine/palettes';
-import { Label, SectionHeader, Segmented, Toggle, inputCls } from '../ui';
+import { Label, SectionHeader, Segmented, Toggle, ViewSwitch } from '../ui';
+
+const INPUT_TAG: Record<ModeInput, string> = { midi: 'MIDI', audio: 'Audio', both: 'MIDI · Audio' };
 
 interface LookSectionProps {
   settings: VisualizerSettings;
@@ -18,13 +20,14 @@ const GROUPS: { kind: ModeManifest['kind']; label: string }[] = [
 
 const colorInputCls = 'w-7 h-7 rounded cursor-pointer bg-transparent border-0 p-0';
 
-/** 01 Look: mode list, album view, colours, on-screen text. */
+/** 01 Look: mode list, MIDI / Audio view, palette, colours. */
 export const LookSection: React.FC<LookSectionProps> = ({ settings, onUpdate, midiData }) => {
-  const isAlbum = findManifest(settings.modeId)?.kind === 'album';
+  const manifest = findManifest(settings.modeId);
+  const isAlbum = manifest?.kind === 'album';
   const hasMidi = (midiData?.notes?.length ?? 0) > 0;
 
   const selectMode = (mode: ModeManifest) => {
-    // 'Under keys' only exists in albums; fall back to the bottom bar elsewhere
+    // 'Above piano' only exists in albums; fall back to the bottom bar elsewhere
     const chordFix = mode.kind !== 'album' && settings.chordDisplay === 'piano' ? { chordDisplay: 'bottom' as const } : {};
     onUpdate({ ...applyMode(mode, settings.paletteId), ...chordFix });
   };
@@ -49,7 +52,10 @@ export const LookSection: React.FC<LookSectionProps> = ({ settings, onUpdate, mi
                     selected ? 'bg-accent/10 shadow-[inset_2px_0_0_rgb(var(--accent))]' : 'hover:bg-surface-2'
                   }`}
                 >
-                  <span className="block text-xs font-medium text-text">{mode.name}</span>
+                  <span className="flex items-baseline justify-between gap-2">
+                    <span className="text-xs font-medium text-text">{mode.name}</span>
+                    <span className="shrink-0 font-mono text-[10px] uppercase text-subtle">{INPUT_TAG[mode.input]}</span>
+                  </span>
                   <span className="block text-[11px] leading-snug text-muted">{mode.description}</span>
                 </button>
               );
@@ -58,21 +64,12 @@ export const LookSection: React.FC<LookSectionProps> = ({ settings, onUpdate, mi
         </div>
       ))}
 
-      {/* Album view: MIDI waterfall + keys, or full-stage audio waveform (albums only) */}
-      {isAlbum && (
+      {/* View: MIDI or full-stage audio waveform (modes with input 'both'; also pinned in the header) */}
+      {manifest && hasViewSwitch(manifest) && (
         <div>
-          <Label>Album view</Label>
-          <Segmented<AlbumView>
-            label="Album view"
-            value={hasMidi ? settings.albumView : 'waveform'}
-            disabled={!hasMidi}
-            onChange={(albumView) => onUpdate({ albumView })}
-            options={[
-              { value: 'midi', label: 'MIDI' },
-              { value: 'waveform', label: 'Audio' },
-            ]}
-          />
-          {!hasMidi && <p className="mt-1 text-[11px] text-subtle">Load a MIDI file to use this view</p>}
+          <Label>View</Label>
+          <ViewSwitch settings={settings} onUpdate={onUpdate} hasMidi={hasMidi} />
+          {!hasMidi && <p className="mt-1 text-[11px] text-subtle">Load a MIDI file to use the MIDI view</p>}
         </div>
       )}
 
@@ -135,44 +132,7 @@ export const LookSection: React.FC<LookSectionProps> = ({ settings, onUpdate, mi
           />
         </div>
       </div>
-
-      <div className="space-y-2">
-        <div>
-          <Label htmlFor="sb-title">Title</Label>
-          <input
-            id="sb-title"
-            type="text"
-            value={settings.title}
-            onChange={(e) => onUpdate({ title: e.target.value })}
-            placeholder="SAMPLE/BEAT NAME"
-            className={`${inputCls} uppercase`}
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <Label htmlFor="sb-key">Key</Label>
-            <input
-              id="sb-key"
-              type="text"
-              value={settings.key}
-              onChange={(e) => onUpdate({ key: e.target.value })}
-              placeholder="KEY"
-              className={`${inputCls} font-mono uppercase`}
-            />
-          </div>
-          <div>
-            <Label htmlFor="sb-signature">Signature (optional)</Label>
-            <input
-              id="sb-signature"
-              type="text"
-              value={settings.producerHandle}
-              onChange={(e) => onUpdate({ producerHandle: e.target.value })}
-              placeholder="PRODUCER NAME"
-              className={`${inputCls} font-mono uppercase`}
-            />
-          </div>
-        </div>
-      </div>
+      {/* Title, key, BPM and producer live above the drop zone (TrackFields) */}
     </section>
   );
 };

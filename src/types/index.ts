@@ -29,7 +29,7 @@ export interface ColorPalette {
 export type SynthTheme = 'crimson' | 'gold' | 'brass' | 'matte';
 export type AlbumView = 'midi' | 'waveform';
 
-export type ChordDisplay = 'bottom' | 'piano' | 'off'; // 'piano' = under album keyboard
+export type ChordDisplay = 'bottom' | 'piano' | 'off'; // 'piano' = just above the album keyboard (UI label "Above piano"; value kept for compatibility)
 
 export interface VisualizerSettings {
   // Direct Text Editing
@@ -50,7 +50,7 @@ export interface VisualizerSettings {
   backgroundGlow: boolean;  // Toggle audio-reactive ambient glow
 
   // Universal Mode Switch: Piano Roll (with MIDI) vs Waveform View (Pure Audio)
-  albumView: AlbumView;     // album modes only: MIDI waterfall + keys, or full-stage audio waveform
+  albumView: AlbumView;     // modes with input 'both' only (all albums): MIDI view, or full-stage audio waveform
 
   // Layout & Style Features
   synthModel?: string;       // Active synthesizer hardware model ('st909', etc.)
@@ -63,7 +63,7 @@ export interface VisualizerSettings {
   // Active Visual Model Theme
   modeId: string;            // id of a folder under src/modes/{standalone,albums}/
   loopBars: number;
-  noteNameTags: boolean;     // Note name tags next to the cursor/playhead (e.g. C5, D4, F3, A#2)
+  noteNameTags: boolean;     // Retired (13/11): no UI, always false. Kept only so mode drawers that still read it compile.
   showProgressDashes: boolean; // Show bar progress dashes below notes
 
   // Harmony Settings
@@ -132,12 +132,18 @@ export interface ModelDrawContext {
   albumView: AlbumView;     // resolved view (no MIDI → 'waveform'); read only by album modes
 }
 
+/**
+ * What a mode can show: 'midi' = MIDI only (export needs a loaded MIDI file),
+ * 'audio' = waveform only, 'both' = MIDI / Audio view switch (settings.albumView).
+ */
+export type ModeInput = 'midi' | 'audio' | 'both';
+
 /** Default export of src/modes/<kind>/<id>/manifest.ts (loaded eagerly). */
 export interface ModeManifest {
   id: string;                  // must equal the folder name
   name: string;
   kind: 'standalone' | 'album';
-  input: 'midi' | 'audio';
+  input: ModeInput;
   description: string;
   hardware?: string;           // forces this hardware id (ignores settings.synthModel)
   fullFrame?: boolean;         // standalone: no console; the mode fills header → notes row

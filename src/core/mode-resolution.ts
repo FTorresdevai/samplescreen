@@ -5,19 +5,30 @@ import { DEFAULT_INK, paletteSettings } from '../engine/palettes';
  * Single place for "which hardware / theme does this frame use".
  * Pure (no Vite APIs) so tests can import it.
  *
- * Only albums have two views (MIDI waterfall or audio waveform). Standalone
- * modes have a single medium, declared by `manifest.input`.
+ * `manifest.input` decides the medium: 'both' modes (all albums) switch between
+ * the MIDI view and the audio waveform via `settings.albumView`; 'midi' and
+ * 'audio' modes have a single medium.
  */
 export const DEFAULT_HARDWARE_ID = 'st909';
 export const WAVEFORM_HARDWARE_ID = 'tape-machine';
 
-/** Without MIDI notes an album can only show its waveform view. */
+/** Without MIDI notes a 'both' mode can only show its waveform view. */
 export function resolveAlbumView(s: VisualizerSettings, hasMidi: boolean): AlbumView {
   return hasMidi ? s.albumView : 'waveform';
 }
 
+/** True when the mode offers the MIDI / Audio view switch. */
+export function hasViewSwitch(m: ModeManifest): boolean {
+  return m.input === 'both';
+}
+
+/** MIDI-only modes cannot export until the user loads a real MIDI file (the demo does not count). */
+export function exportBlockReason(m: ModeManifest, hasMidiFile: boolean): string | null {
+  return m.input === 'midi' && !hasMidiFile ? 'This mode is MIDI only: load a MIDI file to export.' : null;
+}
+
 export function resolveHardwareId(m: ModeManifest, s: VisualizerSettings, hasMidi: boolean): string {
-  if (m.kind === 'album' && resolveAlbumView(s, hasMidi) === 'waveform') {
+  if (hasViewSwitch(m) && resolveAlbumView(s, hasMidi) === 'waveform') {
     return m.waveformHardware ?? WAVEFORM_HARDWARE_ID;
   }
   return m.hardware ?? s.synthModel ?? DEFAULT_HARDWARE_ID;
@@ -25,7 +36,7 @@ export function resolveHardwareId(m: ModeManifest, s: VisualizerSettings, hasMid
 
 /** True when the frame shows MIDI notes (drives the bottom notes row). */
 export function showsMidi(m: ModeManifest, s: VisualizerSettings, hasMidi: boolean): boolean {
-  if (m.kind === 'album') return resolveAlbumView(s, hasMidi) === 'midi';
+  if (hasViewSwitch(m)) return resolveAlbumView(s, hasMidi) === 'midi';
   return m.input === 'midi';
 }
 
