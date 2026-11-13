@@ -1,13 +1,13 @@
 import { ModeManifest } from '../../../types';
 
-// Full-frame, audio-only: a dark technical poster of audio-reactive panels.
+// Full-frame, audio-only: a phosphor CRT measuring instrument.
 const manifest: ModeManifest = {
   id: 'signal-plate',
-  name: 'Night Plate',
+  name: 'Night Scope',
   kind: 'standalone',
   input: 'audio',
   fullFrame: true,
-  description: 'Dark editorial plate of bone-white panels: starburst, wave impression, spectral comb, rippling halftone cloth and a dither column. Audio only.',
+  description: 'Phosphor CRT instrument: triggered oscilloscope trace with afterglow, graticule, spectrum readout and live BPM, dB, frequency and time readouts. Audio only.',
 };
 
 export default manifest;
