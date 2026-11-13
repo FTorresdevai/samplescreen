@@ -1,13 +1,13 @@
 import { ModeManifest } from '../../../types';
 
-// Full-frame mode: no console above; the illustrated synth and piano roll fill header → notes row.
+// Full-frame mode: no console above; the keytar and piano roll fill header → notes row.
 const manifest: ModeManifest = {
   id: 'piano-waterfall',
-  name: 'Graphite Synth',
+  name: 'Pocket Keys 86',
   kind: 'standalone',
   input: 'midi',
   fullFrame: true,
-  description: "A hand-drawn vintage synth on cream paper; keys light up in each note's colour above a pill-note piano roll.",
+  description: "A mid-80s portable keytar whose keys light up in each note's colour and whose display shows the chord and BPM, above a scrolling piano roll.",
 };
 
 export default manifest;

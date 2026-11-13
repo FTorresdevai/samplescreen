@@ -1,33 +1,49 @@
 import { MidiNote, ModelDrawContext, ModeModule, ParsedMidi } from '../../../types';
-import { formatNoteName } from '../../../engine/chords';
-import { darken, hexToRgbaStr, isLightTone } from '../../../engine/palettes';
+import { detectChord, formatNoteName } from '../../../engine/chords';
+import { hexToRgbaStr } from '../../../engine/palettes';
 import { roundRect } from '../../../shared/canvas-utils';
-import { drawSynth, GRAPHITE, hash, LitKey } from './synth';
+import { ACCENT, drawKeytar, KeytarReadout, LitKey } from './keytar';
 
 /**
- * Graphite Synth: cream paper with grain, an original hand-drawn vintage synth whose keys light
- * up in the note's colour, and a piano roll of "pill" notes below it: outlined before the
- * playhead, filled once played. Active pitches are tagged at the left and the current chord is
- * written out underneath (e.g. "F2 · E4 · G4 · C5 · E5").
+ * Pocket Keys 86: an original mid-80s keytar on a dusk-blue gridded backdrop. Its keys light
+ * up in each note's colour and its green display shows the chord and BPM. Below it, a dark
+ * "screen" piano roll scrolls past an accent playhead: notes are outlined before the playhead
+ * and filled once played, active pitches are tagged at the left and the current chord is
+ * written out underneath in the notes' colours.
  */
 
-const PAPER = '#efe9db';
+/** Bright register bands that read on the dark backdrop: bass teal, low-mid amber, mid coral, high periwinkle. */
+const BANDS = ['#3ec6b4', '#f5b841', '#ff7a66', '#8ea7ff'];
+const bandOf = (midi: number): number => (midi < 48 ? 0 : midi < 60 ? 1 : midi < 72 ? 2 : 3);
+const BAND_FAINT = BANDS.map(c => hexToRgbaStr(c, 0.12));
 
-/** Muted ink colours by register: bass teal, low-mid ochre, mid terracotta, high periwinkle. */
 export function noteColor(midi: number): string {
-  if (midi < 48) return '#5c9a8b';
-  if (midi < 60) return '#c9a14a';
-  if (midi < 72) return '#c4785c';
-  return '#7b8fd1';
+  return BANDS[bandOf(midi)];
 }
 
+const INK = '#e9ecf5';
+const DARK_INK = '#11131c';
+const MUTED = 'rgba(233,236,245,0.38)';
 const SEAM_OFFSETS = [-1, 0, 1];
 const NO_SEAM = [0];
 
 interface WindowNote { note: MidiNote; relStart: number; relEnd: number }
 
-/** Notes between `past` seconds ago and `future` seconds ahead, with loop-seam copies. */
-function windowNotes(context: ModelDrawContext, past: number, future: number): WindowNote[] {
+// Reused every frame so the draw loop allocates nothing per note.
+const pool: WindowNote[] = [];
+const activeNotes: MidiNote[] = [];
+const chordPitches: number[] = [];
+const lastChord: number[] = [];
+const lit = new Map<number, LitKey>();
+const litPool: LitKey[] = [];
+const readout: KeytarReadout = { main: '', sub: '' };
+let loopNow = 0;
+let chordSymbol = '';
+let bpmLabel = '';
+let bpmFor = -1;
+
+/** Fills `pool` with notes between `past` seconds ago and `future` seconds ahead (loop-seam copies included); returns the count. */
+function windowNotes(context: ModelDrawContext, past: number, future: number): number {
   const { currentTime, loopTime, duration, midi, settings, introInfo } = context;
   const hasIntro = introInfo?.hasIntro ?? introInfo?.isIntro ?? false;
   const isIntro = introInfo?.isIntro ?? false;
@@ -36,8 +52,9 @@ function windowNotes(context: ModelDrawContext, past: number, future: number): W
   const loopDuration = duration || 16;
   const mainLoopDuration = introInfo?.mainLoopDuration ?? loopDuration;
   const now = typeof loopTime === 'number' && !isNaN(loopTime) ? loopTime : currentTime % loopDuration;
+  loopNow = now;
 
-  const out: WindowNote[] = [];
+  let count = 0;
   for (const note of midi.notes || []) {
     const inMainLoop = hasIntro && !isIntro && note.time >= introDuration;
     const period = inMainLoop ? mainLoopDuration : loopDuration;
@@ -46,10 +63,12 @@ function windowNotes(context: ModelDrawContext, past: number, future: number): W
       const relStart = note.time + k * period - now;
       const relEnd = relStart + note.duration;
       if (relEnd < -past || relStart > future) continue;
-      out.push({ note, relStart, relEnd });
+      const slot = pool[count] ?? (pool[count] = { note, relStart, relEnd });
+      slot.note = note; slot.relStart = relStart; slot.relEnd = relEnd;
+      count++;
     }
   }
-  return out;
+  return count;
 }
 
 /** Chord line: pitches sorted low → high, joined with middle dots. */
@@ -64,12 +83,13 @@ function ranges(midi: ParsedMidi) {
     const notes = midi.notes || [];
     let lo = notes.length ? Math.min(...notes.map(n => n.midi)) : 48;
     let hi = notes.length ? Math.max(...notes.map(n => n.midi)) : 72;
-    // Keyboard: whole octaves around the notes, at least three, clamped to 88 keys
+    // Short keyboard: whole octaves around the notes, two to five octaves
     let kbLo = lo - (lo % 12);
     let kbHi = hi + (11 - (hi % 12));
-    while (kbHi - kbLo + 1 < 36) kbHi += 12;
+    while (kbHi - kbLo + 1 < 24) kbHi += 12;
+    while (kbHi - kbLo + 1 > 60) { kbLo += 12; if (kbHi - kbLo + 1 > 60) kbHi -= 12; }
     kbLo = Math.max(21, kbLo);
-    kbHi = Math.min(108, kbHi);
+    kbHi = Math.min(108, kbHi + 1); // end on a C
     // Roll: the notes' span, one semitone of air each side, at least an octave tall
     lo -= 1; hi += 1;
     while (hi - lo < 12) { lo -= 1; hi += 1; }
@@ -79,199 +99,306 @@ function ranges(midi: ParsedMidi) {
   return r;
 }
 
-const paperCache = new Map<string, HTMLCanvasElement>();
-/** Cream sheet with warm vignette, speckle grain and faint fibres (cached per size and tint). */
-function paperLayer(w: number, h: number, tint: string): HTMLCanvasElement | null {
-  if (typeof document === 'undefined') return null;
-  const key = `${w}x${h}|${tint}`;
-  let c = paperCache.get(key);
-  if (!c) {
-    c = document.createElement('canvas');
-    c.width = Math.ceil(w);
-    c.height = Math.ceil(h);
-    const g = c.getContext('2d');
-    if (g) {
-      g.fillStyle = tint;
-      g.fillRect(0, 0, w, h);
-      const v = g.createRadialGradient(w / 2, h * 0.4, Math.min(w, h) * 0.2, w / 2, h / 2, Math.max(w, h) * 0.75);
-      v.addColorStop(0, 'rgba(255,252,240,0.35)');
-      v.addColorStop(1, 'rgba(120,95,60,0.16)');
-      g.fillStyle = v;
-      g.fillRect(0, 0, w, h);
-      const count = Math.floor((w * h) / 40);
-      for (let i = 0; i < count; i++) {
-        const a = hash(i * 2 + 0.5);
-        g.fillStyle = a > 0.5 ? `rgba(90,70,45,${0.04 + (a - 0.5) * 0.12})` : `rgba(255,255,250,${0.05 + a * 0.12})`;
-        g.fillRect(hash(i * 5 + 1) * w, hash(i * 7 + 3) * h, 1, 1);
-      }
-      g.strokeStyle = 'rgba(110,90,60,0.05)';
-      g.lineWidth = 0.7;
-      for (let i = 0; i < 90; i++) {
-        const fx = hash(i * 11 + 9) * w;
-        const fy = hash(i * 13 + 4) * h;
-        const len = 8 + hash(i * 17) * 26;
-        const ang = (hash(i * 19) - 0.5) * 0.8;
-        g.beginPath();
-        g.moveTo(fx, fy);
-        g.quadraticCurveTo(fx + len / 2, fy + (hash(i) - 0.5) * 4, fx + Math.cos(ang) * len, fy + Math.sin(ang) * len);
-        g.stroke();
-      }
-    }
-    if (paperCache.size > 6) paperCache.clear();
-    paperCache.set(key, c);
+let nameTable: string[] = [];
+let nameAcc: 'sharp' | 'flat' | null = null;
+let nameMid = 0;
+function names(accidental: 'sharp' | 'flat', middleC: 3 | 4 | 5): string[] {
+  if (nameAcc !== accidental || nameMid !== middleC) {
+    nameTable = Array.from({ length: 128 }, (_, p) => formatNoteName(p, accidental, middleC));
+    nameAcc = accidental;
+    nameMid = middleC;
   }
+  return nameTable;
+}
+
+let backdrop: HTMLCanvasElement | null = null;
+let backdropW = 0;
+let backdropH = 0;
+/** Dusk-blue gradient with a faint square grid and a warm glow behind the instrument (cached per size). */
+function backdropLayer(w: number, h: number, glowY: number): HTMLCanvasElement | null {
+  if (typeof document === 'undefined') return null;
+  if (backdrop && backdropW === w && backdropH === h) return backdrop;
+  const c = backdrop ?? document.createElement('canvas');
+  c.width = Math.ceil(w);
+  c.height = Math.ceil(h);
+  const g = c.getContext('2d');
+  if (g) {
+    const bg = g.createLinearGradient(0, 0, 0, h);
+    bg.addColorStop(0, '#2a2f4f');
+    bg.addColorStop(0.45, '#1d2139');
+    bg.addColorStop(1, '#14172a');
+    g.fillStyle = bg;
+    g.fillRect(0, 0, w, h);
+    const glow = g.createRadialGradient(w / 2, glowY, 0, w / 2, glowY, w * 0.6);
+    glow.addColorStop(0, 'rgba(240,83,47,0.16)');
+    glow.addColorStop(1, 'rgba(240,83,47,0)');
+    g.fillStyle = glow;
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = 'rgba(160,175,255,0.05)';
+    for (let gx = 24; gx < w; gx += 32) g.fillRect(gx, 0, 1, h);
+    for (let gy = 24; gy < h; gy += 32) g.fillRect(0, gy, w, 1);
+  }
+  backdrop = c;
+  backdropW = w;
+  backdropH = h;
   return c;
 }
 
-export function drawGraphiteSynth(ctx: CanvasRenderingContext2D, context: ModelDrawContext) {
+/** Keeps the display's chord symbol in sync with the sounding pitches; detectChord runs only when they change. */
+function updateChordSymbol(accidental: 'sharp' | 'flat', middleC: 3 | 4 | 5) {
+  let same = activeNotes.length === lastChord.length;
+  for (let i = 0; same && i < activeNotes.length; i++) same = activeNotes[i].midi === lastChord[i];
+  if (same) return;
+  lastChord.length = 0;
+  for (const n of activeNotes) lastChord.push(n.midi);
+  const found = detectChord(activeNotes, accidental, middleC);
+  chordSymbol = found ? found.symbol : '';
+}
+
+export function drawPocketKeys(ctx: CanvasRenderingContext2D, context: ModelDrawContext) {
   const { region, midi, settings } = context;
   const { x, y, width: w, height: h } = region;
   const accidental = settings.accidental;
   const middleC = settings.middleC;
-  const name = (p: number) => formatNoteName(p, accidental, middleC);
+  const nameOf = names(accidental, middleC);
   const { lo, hi, kbLo, kbHi } = ranges(midi);
+
+  // ---------- Layout ----------
+  const kw = w * 0.88;
+  const kh = Math.min(kw * 0.3, h * 0.24);
+  const angle = -0.06;
+  const ktTop = y + 28;
+  const ktBlock = kh + kw * Math.sin(-angle) + 24;
+  const ktCy = ktTop + ktBlock / 2;
 
   ctx.save();
 
-  // ---------- Paper ----------
-  const tint = isLightTone(settings) && settings.bgColor ? settings.bgColor : PAPER;
+  // ---------- Backdrop ----------
   ctx.save();
   roundRect(ctx, x, y, w, h, 18, false, false);
   ctx.clip();
-  const paper = paperLayer(w, h, tint);
-  if (paper) ctx.drawImage(paper, x, y);
-  else { ctx.fillStyle = tint; ctx.fillRect(x, y, w, h); }
+  const bd = backdropLayer(w, h, ktCy - y);
+  if (bd) ctx.drawImage(bd, x, y);
+  else { ctx.fillStyle = '#1d2139'; ctx.fillRect(x, y, w, h); }
   ctx.restore();
 
   // ---------- Time window ----------
   const bpm = settings.bpm || midi.bpm || 90;
   const span = Math.max(3, Math.min(8, (240 / bpm) * 2));
-  const rollLeft = x + 92;
-  const rollRight = x + w - 44;
+  const panelX = x + 24;
+  const panelW = w - 48;
+  const rollLeft = panelX + 78;
+  const rollRight = panelX + panelW - 14;
   const rollW = rollRight - rollLeft;
-  const playX = rollLeft + rollW * 0.26;
+  const playX = rollLeft + rollW * 0.3;
   const pxPerSec = rollW / span;
   const past = (playX - rollLeft) / pxPerSec;
   const future = (rollRight - playX) / pxPerSec;
-  const notes = windowNotes(context, past, future);
+  const count = windowNotes(context, past, future);
 
-  const active = notes.filter(n => n.relStart <= 0 && n.relEnd >= 0);
-  const lit = new Map<number, LitKey>();
-  for (const n of active) {
-    const prev = lit.get(n.note.midi);
+  // Sounding notes, low → high, and the keys they light
+  activeNotes.length = 0;
+  lit.clear();
+  for (let i = 0; i < count; i++) {
+    const n = pool[i];
+    if (n.relStart > 0 || n.relEnd < 0) continue;
+    const p = n.note.midi;
     const age = -n.relStart;
-    if (!prev || age < prev.age) lit.set(n.note.midi, { color: noteColor(n.note.midi), label: name(n.note.midi), age });
+    const prev = lit.get(p);
+    if (!prev) {
+      activeNotes.push(n.note);
+      const key = litPool[p] ?? (litPool[p] = { color: '', age: 0 });
+      key.color = noteColor(p);
+      key.age = age;
+      lit.set(p, key);
+    } else if (age < prev.age) prev.age = age;
   }
+  activeNotes.sort((a, b) => a.midi - b.midi);
+  updateChordSymbol(accidental, middleC);
 
-  // ---------- Synth ----------
-  const sw = w * 0.9;
-  const sh = Math.min(sw * 0.36, h * 0.3);
-  const sy = y + 46;
-  drawSynth(ctx, { x: Math.round(x + (w - sw) / 2), y: Math.round(sy), w: Math.round(sw), h: Math.round(sh), lo: kbLo, hi: kbHi }, lit, settings.noteNameTags !== false);
+  // ---------- Keytar ----------
+  if (bpm !== bpmFor) { bpmLabel = `BPM ${Math.round(bpm)}`; bpmFor = bpm; }
+  readout.main = chordSymbol;
+  readout.sub = bpmLabel;
+  drawKeytar(ctx, { cx: Math.round(x + w / 2), cy: Math.round(ktCy), w: Math.round(kw), h: Math.round(kh), angle, lo: kbLo, hi: kbHi }, lit, readout);
 
-  // ---------- Piano roll ----------
-  const rollTop = sy + sh + 64;
-  const rollBottom = y + h - 150;
+  // ---------- Roll panel ----------
+  const panelTop = ktTop + ktBlock + 20;
+  const panelBottom = y + h - 128;
+  const rollTop = panelTop + 22;
+  const rollBottom = panelBottom - 14;
   const rows = hi - lo + 1;
   const rowH = (rollBottom - rollTop) / rows;
   const rowY = (p: number) => rollTop + (hi - p + 0.5) * rowH;
 
-  // Faint staff: one hairline per row, slightly stronger on C
-  for (let p = lo; p <= hi; p++) {
-    ctx.fillStyle = hexToRgbaStr(GRAPHITE, p % 12 === 0 ? 0.1 : 0.035);
-    ctx.fillRect(rollLeft, Math.round(rowY(p)), rollW, 1);
-  }
-  ctx.fillStyle = hexToRgbaStr(GRAPHITE, 0.55);
-  ctx.fillRect(rollLeft, Math.round(rollTop) - 1, rollW, 1.5);
-  ctx.fillRect(rollLeft, Math.round(rollBottom), rollW, 1.5);
+  ctx.fillStyle = 'rgba(8,10,22,0.62)';
+  roundRect(ctx, panelX, panelTop, panelW, panelBottom - panelTop, 14, true, false);
+  ctx.strokeStyle = 'rgba(160,175,255,0.14)';
+  ctx.lineWidth = 1;
+  roundRect(ctx, panelX + 0.5, panelTop + 0.5, panelW - 1, panelBottom - panelTop - 1, 14, false, true);
+  // Accent tab at the top-left of the panel, echoing the keytar's stripe
+  ctx.fillStyle = ACCENT;
+  ctx.fillRect(panelX + 18, panelTop, 46, 3);
 
-  const pillH = Math.max(4, Math.min(11, rowH * 0.7));
+  // Lanes: black-key rows shaded like a keyboard, a line on every C
+  for (let p = lo; p <= hi; p++) {
+    const top = rollTop + (hi - p) * rowH;
+    const pc = p % 12;
+    if (pc === 1 || pc === 3 || pc === 6 || pc === 8 || pc === 10) {
+      ctx.fillStyle = 'rgba(255,255,255,0.028)';
+      ctx.fillRect(rollLeft, top, rollW, rowH);
+    }
+    if (pc === 0) {
+      ctx.fillStyle = 'rgba(160,175,255,0.12)';
+      ctx.fillRect(rollLeft, Math.round(top + rowH), rollW, 1);
+    }
+  }
+  // Beat grid scrolling with the music, stronger on bars
+  const spb = 60 / bpm;
+  const firstBeat = Math.ceil((loopNow - past) / spb);
+  const lastBeat = Math.floor((loopNow + future) / spb);
+  for (let b = firstBeat; b <= lastBeat; b++) {
+    const bx = Math.round(playX + (b * spb - loopNow) * pxPerSec);
+    ctx.fillStyle = b % 4 === 0 ? 'rgba(160,175,255,0.16)' : 'rgba(160,175,255,0.06)';
+    ctx.fillRect(bx, rollTop, 1, rollBottom - rollTop);
+  }
+
+  // Notes
+  const barH = Math.max(4, Math.min(16, rowH * 0.78));
+  const radius = Math.min(4, barH / 2);
+  const fontSize = Math.min(11, barH - 3);
+  const showNames = fontSize >= 7;
+  if (showNames) {
+    ctx.font = `700 ${fontSize.toFixed(1)}px "JetBrains Mono", monospace`;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+  }
   ctx.save();
   ctx.beginPath();
   ctx.rect(rollLeft, rollTop, rollW, rollBottom - rollTop);
   ctx.clip();
-  for (const n of notes) {
+  for (let i = 0; i < count; i++) {
+    const n = pool[i];
     const p = n.note.midi;
     if (p < lo || p > hi) continue;
+    const band = bandOf(p);
+    const color = BANDS[band];
     const nx = playX + n.relStart * pxPerSec;
-    const nw = Math.max(pillH, n.note.duration * pxPerSec - 2);
-    const ny = rowY(p) - pillH / 2;
-    const color = noteColor(p);
-    const r = pillH / 2;
-    // Unplayed: paper-filled outline
+    const nw = Math.max(barH, n.note.duration * pxPerSec - 2);
+    const ny = rowY(p) - barH / 2;
+    // Unplayed part: tinted outline
     if (nx + nw > playX) {
-      ctx.fillStyle = hexToRgbaStr(tint, 0.85);
-      roundRect(ctx, nx, ny, nw, pillH, r, true, false);
+      ctx.fillStyle = BAND_FAINT[band];
+      roundRect(ctx, nx, ny, nw, barH, radius, true, false);
     }
-    // Played part: filled with the note's colour up to the playhead
+    // Played part: solid up to the playhead
     if (nx < playX) {
       ctx.save();
       ctx.beginPath();
-      ctx.rect(nx - 1, ny - 2, Math.min(nw + 2, playX - nx + 1), pillH + 4);
+      ctx.rect(nx - 1, ny - 2, Math.min(nw + 2, playX - nx + 1), barH + 4);
       ctx.clip();
-      ctx.fillStyle = hexToRgbaStr(color, 0.88);
-      roundRect(ctx, nx, ny, nw, pillH, r, true, false);
+      ctx.fillStyle = color;
+      roundRect(ctx, nx, ny, nw, barH, radius, true, false);
       ctx.restore();
     }
     const sounding = n.relStart <= 0 && n.relEnd >= 0;
-    ctx.strokeStyle = sounding ? GRAPHITE : darken(color, 0.75);
-    ctx.lineWidth = sounding ? 1.6 : 1.1;
-    roundRect(ctx, nx, ny, nw, pillH, r, false, true);
+    ctx.strokeStyle = sounding ? INK : color;
+    ctx.lineWidth = sounding ? 1.8 : 1.3;
+    roundRect(ctx, nx, ny, nw, barH, radius, false, true);
+    // Name inside the bar when it fits (monospace width estimate, no measureText per note)
+    if (showNames) {
+      const label = nameOf[p];
+      const tw = label.length * fontSize * 0.62;
+      if (tw + 8 <= nw) {
+        const tx = nx + 4;
+        ctx.fillStyle = tx + tw <= playX ? DARK_INK : color;
+        ctx.fillText(label, tx, ny + barH / 2 + 0.5);
+      }
+    }
   }
   ctx.restore();
 
-  // Playhead
-  ctx.fillStyle = GRAPHITE;
-  ctx.fillRect(Math.round(playX), rollTop - 10, 1.4, rollBottom - rollTop + 20);
+  // Playhead: accent line with a notch at the top
+  const px = Math.round(playX);
+  ctx.fillStyle = 'rgba(240,83,47,0.14)';
+  ctx.fillRect(px - 5, rollTop, 10, rollBottom - rollTop);
+  ctx.fillStyle = ACCENT;
+  ctx.fillRect(px - 1, rollTop - 6, 2, rollBottom - rollTop + 12);
+  ctx.beginPath();
+  ctx.moveTo(px - 6, panelTop + 6);
+  ctx.lineTo(px + 6, panelTop + 6);
+  ctx.lineTo(px, panelTop + 14);
+  ctx.closePath();
+  ctx.fill();
 
-  // ---------- Pitch labels at left ----------
+  // ---------- Pitch labels at left (outside the note area) ----------
   ctx.textBaseline = 'middle';
-  ctx.textAlign = 'left';
-  const labelled = new Set(lit.keys());
+  ctx.textAlign = 'center';
+  const tagX = panelX + 12;
+  const tagW = 50;
+  const tagH = Math.max(10, Math.min(16, rowH + 2));
   for (let p = lo; p <= hi; p++) {
     const ly = rowY(p);
-    if (labelled.has(p)) {
-      ctx.fillStyle = GRAPHITE;
-      roundRect(ctx, x + 22, ly - 2.5, 22, 5, 2.5, true, false);
-      ctx.font = '700 11px "JetBrains Mono", monospace';
-      ctx.fillText(name(p), x + 50, ly + 0.5);
+    const on = lit.get(p);
+    if (on) {
+      ctx.fillStyle = on.color;
+      roundRect(ctx, tagX, ly - tagH / 2, tagW, tagH, tagH / 2, true, false);
+      ctx.fillStyle = DARK_INK;
+      ctx.font = `700 ${Math.min(11, tagH - 4)}px "JetBrains Mono", monospace`;
+      ctx.fillText(nameOf[p], tagX + tagW / 2, ly + 0.5);
     } else if (p % 12 === 0) {
-      ctx.fillStyle = hexToRgbaStr(GRAPHITE, 0.35);
+      ctx.fillStyle = MUTED;
       ctx.font = '600 9px "JetBrains Mono", monospace';
-      ctx.fillText(name(p), x + 50, ly + 0.5);
+      ctx.fillText(nameOf[p], tagX + tagW / 2, ly + 0.5);
     }
   }
 
-  // ---------- Chord written out ----------
+  // ---------- Chord written out, each note in its colour ----------
   // Sounding notes; otherwise the last onset group, faded, so the line never jumps to empty
-  let chord = active.map(n => n.note.midi);
+  chordPitches.length = 0;
   let alpha = 1;
-  if (!chord.length) {
-    const played = notes.filter(n => n.relStart <= 0);
-    const last = played.reduce((m, n) => Math.max(m, n.relStart), -Infinity);
-    chord = played.filter(n => n.relStart >= last - 0.06).map(n => n.note.midi);
+  if (activeNotes.length) {
+    for (const n of activeNotes) chordPitches.push(n.midi);
+  } else {
+    let last = -Infinity;
+    for (let i = 0; i < count; i++) if (pool[i].relStart <= 0 && pool[i].relStart > last) last = pool[i].relStart;
+    for (let i = 0; i < count; i++) {
+      const n = pool[i];
+      if (n.relStart <= 0 && n.relStart >= last - 0.06 && !chordPitches.includes(n.note.midi)) chordPitches.push(n.note.midi);
+    }
+    chordPitches.sort((a, b) => a - b);
     alpha = 0.4;
   }
-  const text = chordText(chord, accidental, middleC);
-  if (text) {
-    const cy = y + h - 92;
-    ctx.font = '700 20px "JetBrains Mono", monospace';
-    ctx.textAlign = 'center';
+  if (chordPitches.length) {
+    const cy = y + h - 70;
+    const size = 20;
+    ctx.font = `700 ${size}px "JetBrains Mono", monospace`;
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = hexToRgbaStr(GRAPHITE, alpha);
-    ctx.fillText(text, x + w / 2, cy, w - 80);
-    const tw = Math.min(ctx.measureText(text).width, w - 80);
-    // Hand-drawn underline in the newest note's colour
-    const under = chord.length ? noteColor(chord[chord.length - 1]) : GRAPHITE;
-    ctx.strokeStyle = hexToRgbaStr(under, alpha * 0.9);
-    ctx.lineWidth = 1.6;
-    ctx.beginPath();
-    ctx.moveTo(x + w / 2 - tw * 0.32, cy + 18);
-    ctx.quadraticCurveTo(x + w / 2, cy + 20.5, x + w / 2 + tw * 0.32, cy + 17.5);
-    ctx.stroke();
+    const sep = ' · ';
+    const charW = size * 0.62;
+    let chars = 0;
+    for (let i = 0; i < chordPitches.length; i++) chars += nameOf[chordPitches[i]].length + (i ? sep.length : 0);
+    const scale = Math.min(1, (w - 80) / (chars * charW));
+    const step = charW * scale;
+    if (scale < 1) ctx.font = `700 ${(size * scale).toFixed(1)}px "JetBrains Mono", monospace`;
+    let tx = x + w / 2 - (chars * step) / 2;
+    ctx.globalAlpha = alpha;
+    for (let i = 0; i < chordPitches.length; i++) {
+      if (i) {
+        ctx.fillStyle = MUTED;
+        ctx.fillText(sep, tx, cy);
+        tx += sep.length * step;
+      }
+      const label = nameOf[chordPitches[i]];
+      ctx.fillStyle = noteColor(chordPitches[i]);
+      ctx.fillText(label, tx, cy);
+      tx += label.length * step;
+    }
+    ctx.globalAlpha = 1;
   }
 
   ctx.restore();
 }
 
-export default { draw: drawGraphiteSynth } satisfies ModeModule;
+export default { draw: drawPocketKeys } satisfies ModeModule;
