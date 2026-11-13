@@ -184,7 +184,7 @@ export class CanvasRenderer {
     if (settings.backgroundGlow !== false && !light) {
       const glowColor = settings.glowColor || settings.notesColor || '#f59e0b';
       const reactiveBass = analysis.bass * (settings.audioSensitivity || 1.2);
-      const centerAlpha = Math.min(0.35, 0.16 + reactiveBass * 0.24);
+      const centerAlpha = Math.min(0.18, 0.08 + reactiveBass * 0.12);
 
       ctx.globalAlpha = centerAlpha;
       ctx.drawImage(this.getGlowLayer(width, height, glowColor, settings.accentColor || glowColor), 0, 0);
@@ -252,21 +252,15 @@ export class CanvasRenderer {
 
     // 1. Track Title (e.g. "SAMPLE/BEAT NAME")
     const titleY = 76;
-    ctx.font = '900 44px "Inter", sans-serif';
+    ctx.font = '800 44px "Inter", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    const light = isLightTone(settings);
     const ink = settings.inkColor || DEFAULT_INK;
     const accent = settings.accentColor || ink;
     ctx.fillStyle = ink;
 
-    if (settings.glowIntensity > 0 && !light) {
-      ctx.shadowColor = hexToRgbaStr(settings.notesColor || '#f59e0b', 0.5 * settings.glowIntensity);
-      ctx.shadowBlur = 14 * settings.glowIntensity;
-    }
     const titleStr = (settings.title || 'SAMPLE/BEAT NAME').toUpperCase();
     ctx.fillText(titleStr, centerX, titleY);
-    ctx.shadowBlur = 0;
 
     // 2. Rounded Dark Pill: "120 BPM • KEY • PRODUCER NAME"
     const bpm = settings.bpm || midi.bpm || 120;
@@ -274,10 +268,10 @@ export class CanvasRenderer {
     const handle = (settings.producerHandle || 'PRODUCER NAME').trim().toUpperCase();
 
     const pillY = 126;
-    ctx.font = '800 17px "JetBrains Mono", monospace';
+    ctx.font = '600 17px "JetBrains Mono", monospace';
 
     const segmentBpm = `${bpm} BPM`;
-    const segmentDot = ' • ';
+    const segmentDot = ' · ';
     const segmentKey = keyStr;
     const segmentHandle = handle;
 
@@ -292,13 +286,9 @@ export class CanvasRenderer {
     const pillH = 34;
     const pillX = centerX - pillW / 2;
 
-    // Dark tone: filled pill with an accent border. Light tone: ink outline only.
-    if (!light) {
-      ctx.fillStyle = darken(settings.bgColor || '#141113', 0.55);
-      roundRect(ctx, pillX, pillY - pillH / 2, pillW, pillH, 17, true, false);
-    }
-    ctx.strokeStyle = light ? hexToRgbaStr(ink, 0.25) : hexToRgbaStr(accent, 0.45);
-    ctx.lineWidth = 1.2;
+    // Hairline ink outline, no fill
+    ctx.strokeStyle = hexToRgbaStr(ink, 0.22);
+    ctx.lineWidth = 1;
     roundRect(ctx, pillX, pillY - pillH / 2, pillW, pillH, 17, false, true);
 
     // Draw metadata text inside pill
@@ -310,13 +300,16 @@ export class CanvasRenderer {
     ctx.fillText(segmentBpm, curX, pillY);
     curX += wBpm;
 
-    ctx.fillStyle = accent;
+    const dotColor = hexToRgbaStr(ink, 0.4);
+    ctx.fillStyle = dotColor;
     ctx.fillText(segmentDot, curX, pillY);
     curX += wDot;
 
+    ctx.fillStyle = accent;
     ctx.fillText(segmentKey, curX, pillY);
     curX += wKey;
 
+    ctx.fillStyle = dotColor;
     ctx.fillText(segmentDot, curX, pillY);
     curX += wDot;
 
@@ -364,7 +357,7 @@ export class CanvasRenderer {
       const noteNames = activeNotes.map(n => formatNoteName(n.midi, settings.accidental, settings.middleC));
 
       if (noteNames.length > 0) {
-        ctx.font = '900 34px "Inter", sans-serif';
+        ctx.font = '800 34px "Inter", sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
@@ -379,12 +372,7 @@ export class CanvasRenderer {
 
         const fullText = chordPrefix + noteNames.join('  •  ');
         ctx.fillStyle = ink;
-        if (!light) {
-          ctx.shadowColor = accent;
-          ctx.shadowBlur = 14;
-        }
         ctx.fillText(fullText, centerX, notesY);
-        ctx.shadowBlur = 0;
       }
     }
 
