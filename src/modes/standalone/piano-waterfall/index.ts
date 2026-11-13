@@ -21,6 +21,9 @@ export function noteColor(midi: number): string {
   return '#7b8fd1';
 }
 
+const SEAM_OFFSETS = [-1, 0, 1];
+const NO_SEAM = [0];
+
 interface WindowNote { note: MidiNote; relStart: number; relEnd: number }
 
 /** Notes between `past` seconds ago and `future` seconds ahead, with loop-seam copies. */
@@ -38,7 +41,7 @@ function windowNotes(context: ModelDrawContext, past: number, future: number): W
   for (const note of midi.notes || []) {
     const inMainLoop = hasIntro && !isIntro && note.time >= introDuration;
     const period = inMainLoop ? mainLoopDuration : loopDuration;
-    const offsets = !hasIntro || inMainLoop ? [-1, 0, 1] : [0];
+    const offsets = !hasIntro || inMainLoop ? SEAM_OFFSETS : NO_SEAM;
     for (const k of offsets) {
       const relStart = note.time + k * period - now;
       const relEnd = relStart + note.duration;

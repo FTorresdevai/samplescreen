@@ -151,7 +151,7 @@ export function drawLinearModel(ctx: CanvasRenderingContext2D, context: ModelDra
   // Like the album waterfalls, a sounding note keeps its own shape (just at full strength);
   // the lit key on the keyboard and a faint halo on the strike line show what is playing.
   const nh = Math.max(4, rowH - 2);
-  const showNames = settings.noteNameTags !== false && nh >= 9;
+  const showNames = nh >= 9; // piano-roll names inside the bars (not the retired playhead tags)
   ctx.font = `600 ${Math.min(11, Math.floor(nh - 2))}px "JetBrains Mono", monospace`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';

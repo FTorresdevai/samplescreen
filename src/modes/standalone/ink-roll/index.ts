@@ -469,7 +469,6 @@ export function drawInkRoll(ctx: CanvasRenderingContext2D, context: ModelDrawCon
 
   // Notes: outlines ahead of the playhead, painted behind it
   const nh = Math.max(3, rowH - Math.max(1, rowH * 0.18));
-  const showNames = settings.noteNameTags !== false;
   const nameFont = Math.min(nh - 2, 9 * u);
   const activeLane = new Map<number, Lane>();
   let cur: Anchor | null = null;   // latest onset at or before the playhead (top voice)
@@ -511,7 +510,7 @@ export function drawInkRoll(ctx: CanvasRenderingContext2D, context: ModelDrawCon
       ctx.lineWidth = Math.max(1, u * (isActive ? 1.4 : 0.9));
       ctx.strokeRect(nx + 0.5, ny + 0.5, nw - 1, nh - 1);
 
-      if (showNames && nameFont >= 6) {
+      if (nameFont >= 6) { // names inside the bars, piano-roll style
         const label = nameOf(note.midi);
         ctx.font = mono(nameFont, 700);
         if (ctx.measureText(label).width + 4 * u <= nw) {
