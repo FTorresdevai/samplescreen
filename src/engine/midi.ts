@@ -9,7 +9,7 @@ export async function parseMidiFile(fileOrBuffer: File | ArrayBuffer): Promise<P
   const midi = new Midi(buffer);
   const notes: MidiNote[] = [];
 
-  midi.tracks.forEach(track => {
+  midi.tracks.filter(track => track.notes.length > 0).forEach((track, trackIndex) => {
     track.notes.forEach(note => {
       notes.push({
         name: note.name,
@@ -17,6 +17,7 @@ export async function parseMidiFile(fileOrBuffer: File | ArrayBuffer): Promise<P
         time: note.time,
         duration: note.duration,
         velocity: note.velocity,
+        track: trackIndex,
       });
     });
   });

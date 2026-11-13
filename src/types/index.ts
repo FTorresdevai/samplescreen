@@ -4,6 +4,7 @@ export interface MidiNote {
   time: number;      // start time in seconds
   duration: number;  // duration in seconds
   velocity: number;  // 0 - 1
+  track?: number;    // index among the file's note-carrying tracks (absent for demo/generated MIDI)
 }
 
 export interface ParsedMidi {
