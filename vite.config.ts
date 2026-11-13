@@ -9,7 +9,7 @@ export default defineConfig({
     rollupOptions: { input: { main: 'index.html', app: 'app.html' } },
   },
   server: {
-    host: '0.0.0.0',
+    host: 'localhost', // LAN access only on demand: npm run dev -- --host
     port: 3000,
     open: false,
   },
