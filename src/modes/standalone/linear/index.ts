@@ -1,5 +1,6 @@
 import { ModelDrawContext, ModeModule, ParsedMidi } from '../../../types';
 import { DEFAULT_INK, hexToRgbaStr, isLightTone } from '../../../engine/palettes';
+import { formatNoteName } from '../../../engine/chords';
 
 // Pitch range per MIDI object, computed once instead of scanning every note each frame
 const rangeCache = new WeakMap<ParsedMidi, { minMidi: number; pitchSpan: number }>();
@@ -146,8 +147,14 @@ export function drawLinearModel(ctx: CanvasRenderingContext2D, context: ModelDra
   }
   ctx.stroke();
 
-  // Note blocks: three copies (previous, current, next loop) cover the seam
+  // Note blocks: three copies (previous, current, next loop) cover the seam.
+  // Like the album waterfalls, a sounding note keeps its own shape (just at full strength);
+  // the lit key on the keyboard and a faint halo on the strike line show what is playing.
   const nh = Math.max(4, rowH - 2);
+  const showNames = settings.noteNameTags !== false && nh >= 9;
+  ctx.font = `600 ${Math.min(11, Math.floor(nh - 2))}px "JetBrains Mono", monospace`;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
   for (const note of allNotes) {
     const ny = pitchY(note.midi);
     for (let k = -1; k <= 1; k++) {
@@ -157,29 +164,21 @@ export function drawLinearModel(ctx: CanvasRenderingContext2D, context: ModelDra
       const nx = timeToX(rel);
       const nw = Math.max(4, note.duration * pxPerSec);
       const isActive = rel <= 0 && relEnd > 0;
-      // Attack flash: full at the strike, gone after ~180 ms
-      const flash = isActive ? Math.max(0, 1 - -rel / 0.18) : 0;
+      const played = relEnd <= 0;
 
-      ctx.save();
+      ctx.fillStyle = isActive ? notesColor : hexToRgbaStr(notesColor, played ? noteAlpha * 0.4 : noteAlpha);
+      ctx.fillRect(nx, ny, nw, nh);
+
       if (isActive) {
-        ctx.fillStyle = accent;
-        if (!light) {
-          ctx.shadowColor = notesColor;
-          ctx.shadowBlur = 10 + flash * 14;
-        }
-        const grow = flash * 3;
-        ctx.fillRect(nx, ny - grow, nw, nh + grow * 2);
-      } else {
-        const played = relEnd <= 0;
-        ctx.fillStyle = hexToRgbaStr(notesColor, played ? noteAlpha * 0.4 : noteAlpha);
-        ctx.fillRect(nx, ny, nw, nh);
+        // Soft halo where the note meets the strike line (a short faint bar, no shadowBlur)
+        ctx.fillStyle = light ? hexToRgbaStr(ink, 0.18) : 'rgba(255,255,255,0.16)';
+        ctx.fillRect(strikeX - 5, ny - 2, 10, nh + 4);
       }
-      ctx.restore();
 
-      if (flash > 0) {
-        // Burst on the strike line at this pitch
-        ctx.fillStyle = light ? hexToRgbaStr(ink, 0.35 * flash) : `rgba(255,255,255,${0.55 * flash})`;
-        ctx.fillRect(strikeX - 2 - flash * 6, ny - 4, 4 + flash * 12, nh + 8);
+      // Note name inside the bar, piano-roll style, when it fits
+      if (showNames && nw > 26) {
+        ctx.fillStyle = light ? 'rgba(255,255,255,0.92)' : 'rgba(0,0,0,0.72)';
+        ctx.fillText(formatNoteName(note.midi, settings.accidental, settings.middleC), nx + 4, ny + nh / 2 + 0.5, nw - 8);
       }
     }
   }
