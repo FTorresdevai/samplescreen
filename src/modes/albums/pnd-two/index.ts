@@ -3,7 +3,7 @@ import { formatNoteName } from '../../../engine/chords';
 import { roundRect } from '../../../shared/canvas-utils';
 import { AlbumLayout, computeAlbumLayout } from '../_shell/layout';
 import { computeKeyboardGeometry } from '../_shell/keyboard';
-import { albumEnergy, drawCoverFit, optionalCover, visibleNotes } from '../_shell/waterfall';
+import { CoverMount, albumEnergy, drawCoverBacking, drawCoverFinish, drawCoverFit, optionalCover, visibleNotes } from '../_shell/waterfall';
 import { KeyColors, drawAlbumKeys, noteRect, scopePoints, strokeSmooth } from '../_shell/draw';
 
 /**
@@ -15,6 +15,9 @@ const covers = import.meta.glob<string>('./assets/cover.*', { eager: true, query
 
 const WHITE = '244,246,248';
 const SILVER = '200,204,210';
+
+/** Matte black moulding under a faint, cold night light. */
+const MOUNT: CoverMount = { frame: ['#2a2b2f', '#060607'], mat: '#000000', light: '200,212,255', lightAlpha: 0.14 };
 
 const KEYS: KeyColors = {
   fallboard: '#050506',
@@ -70,14 +73,15 @@ function drawRoom(ctx: CanvasRenderingContext2D, context: ModelDrawContext, layo
   }
 
   const size = roomH - 44;
-  const cx = x + 28;
-  const cy = y + 22;
+  const cx = x + 30;
+  const cy = y + 24;
   const blur = Math.max(0, energy - 0.35) / 0.65;   // 0 → 1
   const cover = optionalCover(covers);
+  drawCoverBacking(ctx, cx, cy, size, y, MOUNT);
 
   ctx.save();
   ctx.beginPath();
-  ctx.rect(cx - 40, cy, size + 80, size);
+  ctx.rect(cx, cy, size, size);
   ctx.clip();
   if (cover) {
     // Ghost copies sliding sideways = the cover's own motion blur
@@ -100,9 +104,7 @@ function drawRoom(ctx: CanvasRenderingContext2D, context: ModelDrawContext, layo
     }
   }
   ctx.restore();
-  ctx.strokeStyle = `rgba(${SILVER},0.4)`;
-  ctx.lineWidth = 1;
-  ctx.strokeRect(cx + 0.5, cy + 0.5, size - 1, size - 1);
+  drawCoverFinish(ctx, cx, cy, size, MOUNT);
 
   // Title block
   const tx = cx + size + 44;

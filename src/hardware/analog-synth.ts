@@ -1,6 +1,7 @@
 import { AudioAnalysis, MidiNote, ParsedMidi, VisualizerSettings } from '../types';
 import { drawPianoKeyboard, KeyboardSkin } from './keyboard-engine';
 import { roundRect } from '../shared/canvas-utils';
+import { computePitchWheelDeflection } from './motion';
 
 export { roundRect };
 
@@ -369,7 +370,7 @@ export function drawAnalogHardwareSynthesizer(
   ctx.fillStyle = settings.accentColor || '#fde047';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const handle = (settings.producerHandle || '@PRODBYSERROT').toUpperCase();
+  const handle = (settings.producerHandle || 'PRODUCER NAME').toUpperCase();
   ctx.fillText(handle, plaqueX + plaqueW / 2, plaqueY + plaqueH / 2);
 
   // 7. Lower Section: Keyboard Shelf with Wheels Bay & 3-Octave Keyboard
@@ -396,8 +397,11 @@ export function drawAnalogHardwareSynthesizer(
   // Draw Pitch and Mod Wheel slots
   const wheelW = 20;
   const wheelH = wheelsBayH - 24;
+  const loopDuration = midi.duration || 16;
+  const loopTime = ((currentTime % loopDuration) + loopDuration) % loopDuration;
+  const pitchDeflection = computePitchWheelDeflection(midi.notes, activeNotes, loopTime);
   [
-    { name: 'PITCH', x: wheelsBayX + 9, val: Math.sin(currentTime * 3) * 6 },
+    { name: 'PITCH', x: wheelsBayX + 9, val: pitchDeflection },
     { name: 'MOD', x: wheelsBayX + wheelsBayW - wheelW - 9, val: analysis.bass * 8 },
   ].forEach(wh => {
     const wy = wheelsBayY + 8;
@@ -409,9 +413,10 @@ export function drawAnalogHardwareSynthesizer(
     ctx.fillStyle = whGrad;
     roundRect(ctx, wh.x, wy, wheelW, wheelH, 2, true, false);
 
-    // Ribbed ridges
+    // Ribbed ridges, shifted by wheel value
+    const offset = ((wh.val % 5) + 5) % 5;
     ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-    for (let ry = wy + 4; ry < wy + wheelH - 4; ry += 5) {
+    for (let ry = wy + 4 + offset; ry < wy + wheelH - 4; ry += 5) {
       ctx.fillRect(wh.x + 1, ry, wheelW - 2, 2);
     }
 

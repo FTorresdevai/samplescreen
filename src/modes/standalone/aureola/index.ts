@@ -4,9 +4,10 @@ import { DEFAULT_INK, hexToRgbaStr, isLightTone } from '../../../engine/palettes
 /**
  * Chromatic Aureola Halo Visual Model
  * Highly Optimized: Removed shadowBlur from 48-ray and 64-bar loops for lightning-fast 60 FPS export
+ * Audio drives the halo.
  */
 export function drawAureolaModel(ctx: CanvasRenderingContext2D, context: ModelDrawContext) {
-  const { region, loopTime, duration, analysis, settings, currentTime } = context;
+  const { region, analysis, settings, currentTime } = context;
   const { centerX: cx, centerY: cy, radius } = region;
 
   ctx.save();
@@ -16,10 +17,6 @@ export function drawAureolaModel(ctx: CanvasRenderingContext2D, context: ModelDr
 
   const bassPulse = analysis.bass * (settings.audioSensitivity || 1.2);
   const midPulse = analysis.mid * (settings.audioSensitivity || 1.2);
-  const loopDuration = duration || 16;
-  const currentLoopTime = loopTime % loopDuration;
-  const loopProgress = currentLoopTime / loopDuration;
-  const playheadAngle = loopProgress * Math.PI * 2 - Math.PI / 2;
 
   // 1. MASSIVE COLORFUL AURA BLOOM (Single high-impact radial gradient, zero per-ray shadow cost)
   const haloBloomR = radius * 1.35 + bassPulse * 45;

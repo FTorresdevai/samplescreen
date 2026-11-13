@@ -1,7 +1,9 @@
-import { AudioAnalysis, MidiNote, ParsedMidi, VisualizerSettings } from '../types';
+import { AudioAnalysis, MidiNote, ParsedMidi, SynthTheme, VisualizerSettings } from '../types';
 import { formatNoteName } from '../engine/chords';
 import { hexToRgbaStr } from '../engine/palettes';
 import { roundRect } from '../shared/canvas-utils';
+import { ConsoleTheme, consoleTheme } from './themes';
+import { computeTuneModKnob } from './motion';
 
 export { roundRect };
 
@@ -446,7 +448,7 @@ function drawWheelsWell(
  * Complete 100% fidelity to reference video:
  * - Oiled mahogany side cheeks with countersunk brass screws
  * - Deep crimson wine-red metallic brushed chassis
- * - Header: ST 909 badge, blinking ACTIVITY led, display window < FEELS THE SAME >, + MULTI, ST-AUDIO
+ * - Header: ST 909 badge, blinking ACTIVITY led, display window < SAMPLE/BEAT NAME >, + MULTI, ST-AUDIO
  * - Full 12-knob TRIPLE VCO (3 rows of 4 knobs)
  * - Full 4-knob MIXER (OSC 1, OSC 2, FEEDBACK, NOISE)
  * - VCF | MULTIMODE with CUTOFF and RES vertical faders + buttons + knobs
@@ -469,11 +471,11 @@ export function drawST909Synthesizer(
   activeNotes: MidiNote[],
   analysis: AudioAnalysis,
   settings: VisualizerSettings,
-  colorTheme: 'crimson' | 'gold' = 'crimson'
+  colorTheme: SynthTheme = 'crimson'
 ) {
   ctx.save();
   const woodW = 28;
-  const isGold = colorTheme === 'gold';
+  const T = consoleTheme(colorTheme);
 
   // 1. Chassis Outer Shadow
   ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
@@ -487,38 +489,23 @@ export function drawST909Synthesizer(
   // 2. Wood Side Cheeks with Brass / Gilded Screws
   [x, x + w - woodW].forEach((wx, idx) => {
     const woodGrad = ctx.createLinearGradient(wx, y, wx + woodW, y);
-    if (isGold) {
-      // Dark Smoked American Walnut with Antique Gold Sheen
-      if (idx === 0) {
-        woodGrad.addColorStop(0, '#19110a');
-        woodGrad.addColorStop(0.3, '#322112');
-        woodGrad.addColorStop(0.65, '#4a321a');
-        woodGrad.addColorStop(1, '#23160b');
-      } else {
-        woodGrad.addColorStop(0, '#23160b');
-        woodGrad.addColorStop(0.35, '#4a321a');
-        woodGrad.addColorStop(0.7, '#322112');
-        woodGrad.addColorStop(1, '#19110a');
-      }
+    const [c0, c1, c2, c3] = T.cheek;
+    if (idx === 0) {
+      woodGrad.addColorStop(0, c0);
+      woodGrad.addColorStop(0.3, c1);
+      woodGrad.addColorStop(0.65, c2);
+      woodGrad.addColorStop(1, c3);
     } else {
-      // Oiled Mahogany Red
-      if (idx === 0) {
-        woodGrad.addColorStop(0, '#1c0a06');
-        woodGrad.addColorStop(0.3, '#3e150d');
-        woodGrad.addColorStop(0.65, '#5c1f13');
-        woodGrad.addColorStop(1, '#2c0d08');
-      } else {
-        woodGrad.addColorStop(0, '#2c0d08');
-        woodGrad.addColorStop(0.35, '#5c1f13');
-        woodGrad.addColorStop(0.7, '#3e150d');
-        woodGrad.addColorStop(1, '#1c0a06');
-      }
+      woodGrad.addColorStop(0, c3);
+      woodGrad.addColorStop(0.35, c2);
+      woodGrad.addColorStop(0.7, c1);
+      woodGrad.addColorStop(1, c0);
     }
     ctx.fillStyle = woodGrad;
     roundRect(ctx, wx, y, woodW, h, 4, true, false);
 
     // Fine woodgrain lines
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.035)';
+    ctx.fillStyle = T.cheekGrain;
     for (let g = 4; g < woodW - 4; g += 5) {
       ctx.fillRect(wx + g, y + 2, 1.2, h - 4);
     }
@@ -534,15 +521,9 @@ export function drawST909Synthesizer(
 
       // Brass / 24K Gold screw head
       const sGrad = ctx.createRadialGradient(cx - 1.5, sy - 1.5, 1, cx, sy, 5);
-      if (isGold) {
-        sGrad.addColorStop(0, '#fef08a');
-        sGrad.addColorStop(0.6, '#d4af37');
-        sGrad.addColorStop(1, '#5a4212');
-      } else {
-        sGrad.addColorStop(0, '#ba9f72');
-        sGrad.addColorStop(0.6, '#7d6745');
-        sGrad.addColorStop(1, '#3a2d1d');
-      }
+      sGrad.addColorStop(0, T.screw[0]);
+      sGrad.addColorStop(0.6, T.screw[1]);
+      sGrad.addColorStop(1, T.screw[2]);
       ctx.fillStyle = sGrad;
       ctx.beginPath();
       ctx.arc(cx, sy, 5, 0, Math.PI * 2);
@@ -564,28 +545,18 @@ export function drawST909Synthesizer(
 
   // Faceplate Metallic Finish: Crimson Wine-Red for TZ, Brushed Royal Gold for Drake
   const faceGrad = ctx.createLinearGradient(faceX, y, faceX, y + faceH);
-  if (isGold) {
-    faceGrad.addColorStop(0, '#4e3b16');
-    faceGrad.addColorStop(0.25, '#38290e');
-    faceGrad.addColorStop(0.6, '#261b07');
-    faceGrad.addColorStop(1, '#160e03');
-  } else {
-    faceGrad.addColorStop(0, '#5a161d');
-    faceGrad.addColorStop(0.25, '#430f14');
-    faceGrad.addColorStop(0.6, '#340a0e');
-    faceGrad.addColorStop(1, '#220508');
-  }
+  T.face.forEach((c, i) => faceGrad.addColorStop([0, 0.25, 0.6, 1][i], c));
   ctx.fillStyle = faceGrad;
   ctx.fillRect(faceX, y, faceW, faceH);
 
   // Micro horizontal brushed lines
-  ctx.fillStyle = isGold ? 'rgba(254, 240, 138, 0.025)' : 'rgba(255, 255, 255, 0.015)';
+  ctx.fillStyle = T.faceBrush;
   for (let r = 0; r < faceH; r += 2) {
     ctx.fillRect(faceX, y + r, faceW, 1);
   }
 
   // Top metal bevel border
-  ctx.fillStyle = isGold ? '#d4af37' : '#8a2830';
+  ctx.fillStyle = T.bevel;
   ctx.fillRect(faceX, y, faceW, 1.5);
 
   // ==========================================
@@ -599,9 +570,9 @@ export function drawST909Synthesizer(
   const badgeW = 54;
   const badgeH = 20;
 
-  ctx.fillStyle = isGold ? '#b48a28' : '#b91c1c';
+  ctx.fillStyle = T.badge;
   roundRect(ctx, badgeX, badgeY, badgeW, badgeH, 2.5, true, false);
-  ctx.strokeStyle = isGold ? '#fde047' : '#ef4444';
+  ctx.strokeStyle = T.badgeLine;
   ctx.lineWidth = 0.8;
   roundRect(ctx, badgeX, badgeY, badgeW, badgeH, 2.5, false, true);
 
@@ -642,7 +613,7 @@ export function drawST909Synthesizer(
   ctx.fillStyle = '#94a3b8';
   ctx.fillText('ANALOGUE SYNTHESIZER', actLedX + 8, actY);
 
-  // 3. Center Recessed Display Window (< FEELS THE SAME >)
+  // 3. Center Recessed Display Window (< SAMPLE/BEAT NAME >)
   const dispW = 240;
   const dispH = 22;
   const dispX = faceX + faceW / 2 - dispW / 2;
@@ -650,7 +621,7 @@ export function drawST909Synthesizer(
 
   ctx.fillStyle = '#0b0f16';
   roundRect(ctx, dispX, dispY, dispW, dispH, 3, true, false);
-  ctx.strokeStyle = isGold ? '#d4af37' : '#1e293b';
+  ctx.strokeStyle = T.displayLine;
   ctx.lineWidth = 1;
   roundRect(ctx, dispX, dispY, dispW, dispH, 3, false, true);
 
@@ -662,8 +633,8 @@ export function drawST909Synthesizer(
   ctx.textAlign = 'right';
   ctx.fillText('›', dispX + dispW - 8, dispY + dispH / 2 + 0.5);
 
-  const patchTitle = (settings.title || 'FEELS THE SAME').toUpperCase();
-  ctx.fillStyle = isGold ? '#fde047' : '#38bdf8';
+  const patchTitle = (settings.title || 'SAMPLE/BEAT NAME').toUpperCase();
+  ctx.fillStyle = T.displayText;
   ctx.textAlign = 'center';
   ctx.fillText(patchTitle.length > 24 ? patchTitle.substring(0, 24) + '...' : patchTitle, dispX + dispW / 2, dispY + dispH / 2 + 0.5);
 
@@ -718,7 +689,9 @@ export function drawST909Synthesizer(
   drawModuleBox(ctx, m4X, upperY, modW4, upperH, 'ANALOGUE ENVE ▼');
 
   // --- MODULE 1: TRIPLE VCO (Complete 12 knobs: 3 rows of 4!) ---
-  const osc2TuneDynamic = (Math.sin(currentTime * 3.8) + 1) * 0.5;
+  const loopDuration = midi.duration || 16;
+  const loopTime = ((currentTime % loopDuration) + loopDuration) % loopDuration;
+  const osc2TuneDynamic = computeTuneModKnob(midi.notes, loopTime, analysis);
 
   // Row 1 (Osc 1): FM 1>2, Range 8', Sync, Wave
   drawKnob(ctx, m1X + 44, upperY + 52, 12.5, 'FM 1>2', 0.25, false, 0, '#64748b');
@@ -758,9 +731,9 @@ export function drawST909Synthesizer(
     const py = upperY + 34 + Math.floor(pi / 2) * 26;
     const isSel = pi === 0;
 
-    ctx.fillStyle = isSel ? (isGold ? '#b48a28' : '#991b1b') : '#1e2129';
+    ctx.fillStyle = isSel ? T.selFill : '#1e2129';
     roundRect(ctx, px, py, 34, 19, 2, true, false);
-    ctx.strokeStyle = isSel ? (isGold ? '#fde047' : '#f87171') : '#334155';
+    ctx.strokeStyle = isSel ? T.selLine : '#334155';
     ctx.lineWidth = 0.8;
     roundRect(ctx, px, py, 34, 19, 2, false, true);
 
@@ -871,14 +844,14 @@ export function drawST909Synthesizer(
     const tx = tabStartX + ti * tabW;
     const isScope = t === 'SCOPE';
 
-    ctx.fillStyle = isScope ? (isGold ? '#2d2009' : '#351117') : '#14161d';
+    ctx.fillStyle = isScope ? T.tabFill : '#14161d';
     roundRect(ctx, tx + 2, tabY, tabW - 4, 17, 2, true, false);
-    ctx.strokeStyle = isScope ? (isGold ? '#d4af37' : '#ea580c') : '#272a36';
+    ctx.strokeStyle = isScope ? T.tabLine : '#272a36';
     ctx.lineWidth = isScope ? 1.2 : 0.8;
     roundRect(ctx, tx + 2, tabY, tabW - 4, 17, 2, false, true);
 
     ctx.font = '700 8px "Inter", sans-serif';
-    ctx.fillStyle = isScope ? (isGold ? '#fde047' : '#ffaa22') : '#828a9a';
+    ctx.fillStyle = isScope ? T.tabText : '#828a9a';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(t, tx + tabW / 2, tabY + 8.5);
@@ -906,24 +879,18 @@ export function drawST909Synthesizer(
     kbH,
     activeNotes,
     settings,
-    isGold
+    T
   );
 
   // Bottom solid apron lip running along the front of the keys
   const apronY = y + h - 22;
   const apronGrad = ctx.createLinearGradient(faceX, apronY, faceX, y + h);
-  if (isGold) {
-    apronGrad.addColorStop(0, '#362413');
-    apronGrad.addColorStop(0.4, '#4c3319');
-    apronGrad.addColorStop(1, '#1e1308');
-  } else {
-    apronGrad.addColorStop(0, '#3a160c');
-    apronGrad.addColorStop(0.4, '#552112');
-    apronGrad.addColorStop(1, '#200904');
-  }
+  apronGrad.addColorStop(0, T.apron[0]);
+  apronGrad.addColorStop(0.4, T.apron[1]);
+  apronGrad.addColorStop(1, T.apron[2]);
   ctx.fillStyle = apronGrad;
   ctx.fillRect(faceX, apronY, faceW, 22);
-  ctx.fillStyle = isGold ? 'rgba(254, 240, 138, 0.25)' : 'rgba(255, 255, 255, 0.15)';
+  ctx.fillStyle = T.apronLip;
   ctx.fillRect(faceX, apronY, faceW, 1.2);
 
   ctx.restore();
@@ -941,7 +908,7 @@ function drawClean25KeyKeyboard(
   kbH: number,
   activeNotes: MidiNote[],
   settings: VisualizerSettings,
-  isGold = false
+  T: ConsoleTheme
 ) {
   ctx.save();
 
@@ -1013,7 +980,7 @@ function drawClean25KeyKeyboard(
   });
 
   // Felt cushioning strip along top (Red for TZ, Gold for Drake)
-  ctx.fillStyle = isGold ? '#b48a28' : '#8b151b';
+  ctx.fillStyle = T.felt;
   ctx.fillRect(kbX, kbY, kbW, 4.5);
 
   // 1. Draw White Keys First
@@ -1022,15 +989,12 @@ function drawClean25KeyKeyboard(
 
     if (isActive) {
       ctx.save();
-      ctx.shadowColor = '#f59e0b';
+      ctx.shadowColor = T.keyGlow;
       ctx.shadowBlur = 16 * (settings.glowIntensity || 1.2);
 
       // Warm golden/amber gradient matching reference video
       const actGrad = ctx.createLinearGradient(k.x, kbY + 4, k.x, kbY + k.h);
-      actGrad.addColorStop(0, '#ffffff');
-      actGrad.addColorStop(0.30, '#fef08a');
-      actGrad.addColorStop(0.70, '#fde047');
-      actGrad.addColorStop(1, '#eab308');
+      T.keyActive.forEach((c, i) => actGrad.addColorStop([0, 0.3, 0.7, 1][i], c));
       ctx.fillStyle = actGrad;
       roundRect(ctx, k.x + 0.5, kbY + 4, k.w - 1, k.h - 6, 2.5, true, false);
 
@@ -1077,14 +1041,15 @@ function drawClean25KeyKeyboard(
 
     if (isActive) {
       ctx.save();
-      ctx.shadowColor = '#f59e0b';
+      ctx.shadowColor = T.keyGlow;
       ctx.shadowBlur = 18 * (settings.glowIntensity || 1.2);
 
       const blkGrad = ctx.createLinearGradient(k.x, kbY + 4, k.x, kbY + k.h);
-      blkGrad.addColorStop(0, '#ffffff');
-      blkGrad.addColorStop(0.35, '#fde047');
-      blkGrad.addColorStop(0.80, '#eab308');
-      blkGrad.addColorStop(1, '#b45309');
+      const [k0, , k2, k3] = T.keyActive;
+      blkGrad.addColorStop(0, k0);
+      blkGrad.addColorStop(0.35, k2);
+      blkGrad.addColorStop(0.8, k3);
+      blkGrad.addColorStop(1, T.keyActiveDeep);
       ctx.fillStyle = blkGrad;
       roundRect(ctx, k.x, kbY + 4, k.w, k.h, 2, true, false);
       ctx.restore();

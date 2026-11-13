@@ -18,8 +18,8 @@ function settingsFor(modeId: string): VisualizerSettings {
     ...DEFAULT_SETTINGS,
     ...applyMode(manifest, DEFAULT_SETTINGS.paletteId),
     bpm: midi.bpm,
-    key: 'C MIN',
-    producerHandle: 'YOUR.HANDLE',
+    key: 'KEY',
+    producerHandle: 'PRODUCER NAME',
   };
 }
 

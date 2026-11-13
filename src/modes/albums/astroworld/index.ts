@@ -3,7 +3,7 @@ import { formatNoteName } from '../../../engine/chords';
 import { roundRect } from '../../../shared/canvas-utils';
 import { AlbumLayout, computeAlbumLayout } from '../_shell/layout';
 import { computeKeyboardGeometry } from '../_shell/keyboard';
-import { albumEnergy, drawCoverFit, hash01, optionalCover, visibleNotes } from '../_shell/waterfall';
+import { CoverMount, albumEnergy, drawCoverBacking, drawCoverFinish, drawCoverFit, hash01, optionalCover, visibleNotes } from '../_shell/waterfall';
 import { KeyColors, drawAlbumKeys, noteRect, scopePoints, strokeSmooth } from '../_shell/draw';
 
 /**
@@ -16,6 +16,9 @@ const covers = import.meta.glob<string>('./assets/cover.*', { eager: true, query
 const GOLD = '246,196,83';
 const CREAM = '255,233,168';
 const EMBER = '255,157,46';
+
+/** Brass moulding under a warm fairground spot. */
+const MOUNT: CoverMount = { frame: ['#e3c277', '#5a4219'], mat: '#120d06', light: '255,190,110', lightAlpha: 0.32 };
 
 const KEYS: KeyColors = {
   fallboard: '#0b0a1c',
@@ -71,9 +74,12 @@ function drawRoom(ctx: CanvasRenderingContext2D, context: ModelDrawContext, layo
     ctx.fillRect(x + 10 + hash01(i) * (w - 20), y + 8 + hash01(i + 50) * (roomH - 16), s, s);
   }
 
+  drawBulbs(ctx, context, energy);
+
   const size = roomH - 44;
-  const cx = x + 28;
-  const cy = y + 22;
+  const cx = x + 30;
+  const cy = y + 24;
+  drawCoverBacking(ctx, cx, cy, size, y, MOUNT);
   const cover = optionalCover(covers);
   if (cover) {
     drawCoverFit(ctx, cover, cx, cy, size);
@@ -90,9 +96,7 @@ function drawRoom(ctx: CanvasRenderingContext2D, context: ModelDrawContext, layo
     ctx.lineTo(cx + size * 0.2, cy + size);
     ctx.stroke();
   }
-  ctx.strokeStyle = `rgba(${GOLD},0.5)`;
-  ctx.lineWidth = 1;
-  ctx.strokeRect(cx + 0.5, cy + 0.5, size - 1, size - 1);
+  drawCoverFinish(ctx, cx, cy, size, MOUNT);
 
   // Title block
   const tx = cx + size + 44;
@@ -142,6 +146,40 @@ function drawRoom(ctx: CanvasRenderingContext2D, context: ModelDrawContext, layo
     ctx.fillStyle = `rgba(${CREAM},${lit})`;
     ctx.beginPath();
     ctx.arc(px, py, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/** A sagging string of warm bulbs across the top of the room; brighter and faster with energy. */
+function drawBulbs(ctx: CanvasRenderingContext2D, context: ModelDrawContext, energy: number) {
+  const { region, currentTime, analysis } = context;
+  const { x, y, width: w } = region;
+  const count = 28;
+  const sag = 16;
+  ctx.strokeStyle = 'rgba(40,30,20,0.9)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 0; i <= count; i++) {
+    const t = i / count;
+    const px = x + 12 + t * (w - 24);
+    const py = y + 6 + Math.sin(t * Math.PI) * sag;
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+  const step = currentTime * (1.5 + energy * 8);
+  for (let i = 0; i <= count; i++) {
+    const t = i / count;
+    const px = x + 12 + t * (w - 24);
+    const py = y + 9 + Math.sin(t * Math.PI) * sag;
+    const on = (Math.floor(step) + i) % 3 === 0 ? 1 : 0.55;
+    const lit = Math.min(1, on * (0.6 + analysis.rms * 0.6));
+    ctx.fillStyle = `rgba(${EMBER},${0.16 * lit})`;
+    ctx.beginPath();
+    ctx.arc(px, py, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = `rgba(${CREAM},${0.35 + 0.65 * lit})`;
+    ctx.beginPath();
+    ctx.arc(px, py, 1.8, 0, Math.PI * 2);
     ctx.fill();
   }
 }

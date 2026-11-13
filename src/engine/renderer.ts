@@ -108,7 +108,9 @@ export class CanvasRenderer {
     };
 
     // Modules still loading (first frame after a mode switch): leave the slots empty.
-    modules?.hardware.draw(ctx, {
+    // Full-frame modes (piano waterfall) take the console's space as well.
+    const fullFrame = !!modules?.manifest.fullFrame;
+    if (!fullFrame) modules?.hardware.draw(ctx, {
       region: synthRegion,
       currentTime,
       midi,
@@ -119,8 +121,8 @@ export class CanvasRenderer {
     });
 
     // 5. Active Visual Model Card (Bottom Half: y = 795 to 1465, h = 670px)
-    const modelY = 795;
-    const modelH = 670;
+    const modelY = fullFrame ? synthY : 795;
+    const modelH = fullFrame ? 795 + 670 - synthY : 670;
 
     const modelRegion: ModelRegion = {
       x: contentStartX,
@@ -248,7 +250,7 @@ export class CanvasRenderer {
     const { ctx } = this;
     ctx.save();
 
-    // 1. Track Title (e.g. "FEELS THE SAME")
+    // 1. Track Title (e.g. "SAMPLE/BEAT NAME")
     const titleY = 76;
     ctx.font = '900 44px "Inter", sans-serif';
     ctx.textAlign = 'center';
@@ -262,14 +264,14 @@ export class CanvasRenderer {
       ctx.shadowColor = hexToRgbaStr(settings.notesColor || '#f59e0b', 0.5 * settings.glowIntensity);
       ctx.shadowBlur = 14 * settings.glowIntensity;
     }
-    const titleStr = (settings.title || 'FEELS THE SAME').toUpperCase();
+    const titleStr = (settings.title || 'SAMPLE/BEAT NAME').toUpperCase();
     ctx.fillText(titleStr, centerX, titleY);
     ctx.shadowBlur = 0;
 
-    // 2. Rounded Dark Pill: "120 BPM • E MIN • PRODBYSERROT"
-    const bpm = settings.bpm || midi.bpm || 80;
-    const keyStr = (settings.key || midi.key || 'CMIN').toUpperCase();
-    const handle = (settings.producerHandle || 'PRODBYSERROT').trim().toUpperCase();
+    // 2. Rounded Dark Pill: "120 BPM • KEY • PRODUCER NAME"
+    const bpm = settings.bpm || midi.bpm || 120;
+    const keyStr = (settings.key || midi.key || 'KEY').toUpperCase();
+    const handle = (settings.producerHandle || 'PRODUCER NAME').trim().toUpperCase();
 
     const pillY = 126;
     ctx.font = '800 17px "JetBrains Mono", monospace';

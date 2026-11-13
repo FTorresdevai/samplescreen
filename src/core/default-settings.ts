@@ -4,10 +4,10 @@ import { DEFAULT_PALETTE_ID, paletteSettings } from '../engine/palettes';
 
 /** Settings on first load; the app overrides title/BPM/key/mode from the URL, the landing previews reuse them. */
 export const DEFAULT_SETTINGS: VisualizerSettings = {
-  title: 'FEELS THE SAME',
+  title: 'SAMPLE/BEAT NAME',
   bpm: 120,
-  key: 'E MIN',
-  producerHandle: 'PRODBYSERROT',
+  key: 'KEY',
+  producerHandle: 'PRODUCER NAME',
   watermark: 'samplescreen visualizer • 1080x1920 @ 60 fps',
 
   ...paletteSettings(DEFAULT_PALETTE_ID),

@@ -105,6 +105,17 @@ The skills below are curated from [addyosmani/agent-skills](https://github.com/a
 
 ---
 
+### 6. Context Engineering & Token Reduction (Claude Code & Antigravity)
+
+| Skill | When to Use | How it Saves Tokens & Context |
+| :--- | :--- | :--- |
+| **`context-optimization`** | Automatically active in all turns. | Enforces observation masking (filters long test/build outputs) and retrieval scoping. Cuts tool token consumption by up to 80%. |
+| **`context-compression`** | When conversations reach 70% window capacity. | Performs anchored iterative summarization into 4 structured anchors, preventing context rot. |
+| **`filesystem-context`** | For multi-step tasks and intermediate plans. | Offloads checklists and raw data to `scratch/` files instead of polluting the conversational memory. |
+| **`incremental-implementation`** | During any code modifications. | Emits small, testable diffs instead of regenerating whole 500-line components. |
+
+---
+
 ## 🔗 Reference Repositories
 
 - **[addyosmani/agent-skills](https://github.com/addyosmani/agent-skills)**: SDLC and senior software engineering agent skills.

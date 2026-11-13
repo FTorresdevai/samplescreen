@@ -13,6 +13,9 @@ export const HARDWARE_LOADERS: Record<string, () => Promise<HardwareModule>> = {
     draw: (ctx, { region: r, currentTime, analysis, settings, theme }) =>
       m.drawStudioTapeMachine(ctx, r.x, r.y, r.width, r.height, theme, { currentTime, analysis, bpm: settings.bpm }),
   })),
+  'album-banner': () => import('./album-banner').then(m => ({
+    draw: (ctx, context) => m.drawAlbumBanner(ctx, context),
+  })),
   'wing-upright': () => import('./wing-upright-synth').then(m => ({
     draw: (ctx, { region: r, currentTime, midi, activeNotes, analysis, settings }) =>
       m.drawWingUprightSynth(ctx, r.x, r.y, r.width, r.height, currentTime, midi, activeNotes, analysis, settings),

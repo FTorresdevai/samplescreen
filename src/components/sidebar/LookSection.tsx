@@ -144,7 +144,7 @@ export const LookSection: React.FC<LookSectionProps> = ({ settings, onUpdate, mi
             type="text"
             value={settings.title}
             onChange={(e) => onUpdate({ title: e.target.value })}
-            placeholder="FEELS THE SAME"
+            placeholder="SAMPLE/BEAT NAME"
             className={`${inputCls} uppercase`}
           />
         </div>
@@ -156,7 +156,7 @@ export const LookSection: React.FC<LookSectionProps> = ({ settings, onUpdate, mi
               type="text"
               value={settings.key}
               onChange={(e) => onUpdate({ key: e.target.value })}
-              placeholder="CMIN"
+              placeholder="KEY"
               className={`${inputCls} font-mono uppercase`}
             />
           </div>
@@ -167,7 +167,7 @@ export const LookSection: React.FC<LookSectionProps> = ({ settings, onUpdate, mi
               type="text"
               value={settings.producerHandle}
               onChange={(e) => onUpdate({ producerHandle: e.target.value })}
-              placeholder="PRODBYSERROT"
+              placeholder="PRODUCER NAME"
               className={`${inputCls} font-mono uppercase`}
             />
           </div>

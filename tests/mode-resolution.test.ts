@@ -24,6 +24,7 @@ test('Mode resolution: album waveform view uses the tape machine, MIDI view the 
   assert.strictEqual(resolveHardwareId(album, s({ albumView: 'waveform' }), true), 'tape-machine');
   assert.strictEqual(resolveHardwareId(album, s({}), false), 'tape-machine');
   assert.strictEqual(resolveHardwareId(album, s({}), true), 'diva-synth');
+  assert.strictEqual(resolveHardwareId({ ...album, waveformHardware: 'album-banner' }, s({ albumView: 'waveform' }), true), 'album-banner');
 });
 
 test('Mode resolution: standalone modes ignore the album view', () => {
@@ -44,6 +45,7 @@ test('Mode resolution: notes row follows what the frame shows', () => {
 test('Mode resolution: synth theme and applyMode palette', () => {
   assert.strictEqual(resolveSynthTheme(album), 'gold');
   assert.strictEqual(resolveSynthTheme(standalone), 'crimson');
+  assert.strictEqual(resolveSynthTheme({ ...album, synthTheme: 'brass' }), 'brass');
   // Albums bring their palette (ink defaults to parchment); standalone modes take the chosen palette
   assert.deepStrictEqual(applyMode(album), { modeId: 'album-x', inkColor: '#f3eddf', ...album.palette });
   const paper = applyMode(standalone, 'atelier-paper');

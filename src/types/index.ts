@@ -26,7 +26,7 @@ export interface ColorPalette {
   tone: 'dark' | 'light';
 }
 
-export type SynthTheme = 'crimson' | 'gold';
+export type SynthTheme = 'crimson' | 'gold' | 'brass' | 'matte';
 export type AlbumView = 'midi' | 'waveform';
 
 export type ChordDisplay = 'bottom' | 'piano' | 'off'; // 'piano' = under album keyboard
@@ -140,6 +140,7 @@ export interface ModeManifest {
   input: 'midi' | 'audio';
   description: string;
   hardware?: string;           // forces this hardware id (ignores settings.synthModel)
+  fullFrame?: boolean;         // standalone: no console; the mode fills header → notes row
   waveformHardware?: string;   // albums: hardware in 'waveform' view (default 'tape-machine')
   palette?: Pick<VisualizerSettings, 'notesColor' | 'circleColor' | 'bgColor' | 'accentColor' | 'glowColor'> & { inkColor?: string }; // albums only
   synthTheme?: SynthTheme;     // default 'crimson'

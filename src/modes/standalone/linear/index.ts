@@ -1,5 +1,4 @@
 import { ModelDrawContext, ModeModule, ParsedMidi } from '../../../types';
-import { formatNoteName } from '../../../engine/chords';
 import { DEFAULT_INK, hexToRgbaStr, isLightTone } from '../../../engine/palettes';
 
 // Pitch range per MIDI object, computed once instead of scanning every note each frame
@@ -17,7 +16,7 @@ function getPitchRange(midi: ParsedMidi) {
 }
 
 export function drawLinearModel(ctx: CanvasRenderingContext2D, context: ModelDrawContext) {
-  const { region, loopTime, duration, midi, settings } = context;
+  const { region, loopTime, duration, midi, settings, activeNotes } = context;
   const { x, y, width: w, height: h } = region;
 
   ctx.save();
@@ -36,83 +35,169 @@ export function drawLinearModel(ctx: CanvasRenderingContext2D, context: ModelDra
   ctx.strokeRect(x, y, w, h);
 
   // ==========================================
-  // PIANO ROLL MODE (WITH MIDI NOTES)
+  // DAW PIANO ROLL GEOMETRY
+  // Vertical keyboard on the left, scrolling roll on the right
   // ==========================================
+  const keysW = Math.max(28, Math.min(48, w * 0.06));
+  const rollX = x + keysW;
+  const rollW = w - keysW;
+
   const bpm = settings.bpm || midi.bpm || 80;
   const secondsPerBar = (60 / bpm) * 4;
-  const totalBars = Math.max(1, Math.round(duration / secondsPerBar));
+  const loop = duration > 0 ? duration : 16;
+  const now = ((loopTime % loop) + loop) % loop;
+  const spanSec = Math.max(2, Math.min(loop, secondsPerBar * 4));   // up to 4 bars on screen
+  const pxPerSec = rollW / spanSec;
+  const strikeX = rollX + rollW * 0.28;
+  const pastSec = (strikeX - rollX) / pxPerSec;
+  const futureSec = (rollX + rollW - strikeX) / pxPerSec;
+  const timeToX = (rel: number) => strikeX + rel * pxPerSec;
+  const notesColor = settings.notesColor || '#f59e0b';
+  const accent = settings.accentColor || '#fde047';
 
-  // Pitch Range Mapping
   const allNotes = midi.notes || [];
   const { minMidi, pitchSpan } = getPitchRange(midi);
+  const rowH = (h - 60) / pitchSpan;
+  const pitchY = (p: number) => y + h - 30 - ((p - minMidi) / pitchSpan) * (h - 60);
 
-  // Time window
-  const windowSecs = duration || 16;
-  const playheadX = x + (loopTime / windowSecs) * w;
+  const activePitches = new Set<number>(activeNotes.map(n => n.midi));
+  const keyActiveColor = light ? (settings.notesColor || ink) : (settings.accentColor || '#fde047');
+  const whiteKeyColor = light ? '#fbfaf6' : '#efe9dc';
+  const blackKeyColor = light ? ink : '#141113';
 
-  // Vertical Bar Lines
-  ctx.strokeStyle = light ? hexToRgbaStr(settings.circleColor || ink, 0.9) : hexToRgbaStr(ink, 0.05);
+  // 1. Vertical Keyboard (DAW sidebar)
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, keysW, h);
+  ctx.clip();
+
+  for (let p = minMidi; p < minMidi + pitchSpan; p++) {
+    const pc = ((p % 12) + 12) % 12;
+    const isWhite = pc === 0 || pc === 2 || pc === 4 || pc === 5 || pc === 7 || pc === 9 || pc === 11;
+    const ky = pitchY(p);
+    const isAct = activePitches.has(p);
+
+    if (isWhite) {
+      ctx.fillStyle = isAct ? keyActiveColor : whiteKeyColor;
+      ctx.fillRect(x, ky, keysW, rowH - 1);
+    } else {
+      // White extension behind the black key
+      ctx.fillStyle = whiteKeyColor;
+      ctx.fillRect(x, ky, keysW, rowH - 1);
+      // Black key
+      ctx.fillStyle = isAct ? keyActiveColor : blackKeyColor;
+      ctx.fillRect(x, ky, keysW * 0.62, rowH - 1);
+    }
+
+    // Key separator
+    ctx.fillStyle = light ? hexToRgbaStr(ink, 0.15) : 'rgba(0, 0, 0, 0.25)';
+    ctx.fillRect(x, ky + rowH - 1, keysW, 1);
+
+    // Subtle C key marker line
+    if (pc === 0) {
+      ctx.fillStyle = light ? hexToRgbaStr(ink, 0.4) : hexToRgbaStr(ink, 0.3);
+      ctx.fillRect(x, ky + rowH - 1, keysW, 1.5);
+    }
+  }
+  ctx.restore();
+
+  // Vertical divider between keys and piano roll
+  ctx.strokeStyle = hexToRgbaStr(ink, light ? 0.25 : 0.12);
   ctx.lineWidth = 1;
-  for (let bar = 0; bar <= totalBars; bar++) {
-    const bx = x + (bar / totalBars) * w;
-    ctx.beginPath();
-    ctx.moveTo(bx, y);
-    ctx.lineTo(bx, y + h);
-    ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(rollX, y);
+  ctx.lineTo(rollX, y + h);
+  ctx.stroke();
+
+  // 2. Piano Roll (Lanes, Bar lines, Note blocks)
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(rollX, y, rollW, h);
+  ctx.clip();
+
+  // Background lane stripes for black keys & C dividers
+  for (let p = minMidi; p < minMidi + pitchSpan; p++) {
+    const pc = ((p % 12) + 12) % 12;
+    const isWhite = pc === 0 || pc === 2 || pc === 4 || pc === 5 || pc === 7 || pc === 9 || pc === 11;
+    const ky = pitchY(p);
+    if (!isWhite) {
+      ctx.fillStyle = hexToRgbaStr(ink, light ? 0.04 : 0.03);
+      ctx.fillRect(rollX, ky, rollW, rowH);
+    }
+    if (pc === 0) {
+      ctx.fillStyle = hexToRgbaStr(ink, light ? 0.12 : 0.06);
+      ctx.fillRect(rollX, ky + rowH - 1, rollW, 1);
+    }
   }
 
-  // Draw MIDI Note Blocks
-  allNotes.forEach(note => {
-    const nx = x + (note.time / windowSecs) * w;
-    const nw = Math.max(4, (note.duration / windowSecs) * w);
-    const pitchNorm = (note.midi - minMidi) / pitchSpan;
-    const ny = y + h - 30 - pitchNorm * (h - 60);
-    const nh = Math.max(8, (h - 60) / pitchSpan - 2);
-
-    const isActive = loopTime >= note.time && loopTime < note.time + note.duration;
-
-    ctx.save();
-    if (isActive) {
-      ctx.fillStyle = settings.accentColor || '#fde047';
-      if (!light) {
-        ctx.shadowColor = settings.notesColor || '#f59e0b';
-        ctx.shadowBlur = 10;
-      }
-    } else {
-      ctx.fillStyle = hexToRgbaStr(settings.notesColor || '#f59e0b', noteAlpha);
+  // Bar lines (wrap around the loop so the grid never jumps)
+  ctx.strokeStyle = light ? hexToRgbaStr(settings.circleColor || ink, 0.9) : hexToRgbaStr(ink, 0.06);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  const totalBars = Math.max(1, Math.round(loop / secondsPerBar));
+  for (let k = -1; k <= 1; k++) {
+    for (let bar = 0; bar < totalBars; bar++) {
+      const rel = bar * secondsPerBar + k * loop - now;
+      if (rel < -pastSec || rel > futureSec) continue;
+      const bx = timeToX(rel);
+      ctx.moveTo(bx, y);
+      ctx.lineTo(bx, y + h);
     }
+  }
+  ctx.stroke();
 
-    ctx.fillRect(nx, ny, nw, nh);
-    ctx.restore();
+  // Note blocks: three copies (previous, current, next loop) cover the seam
+  const nh = Math.max(4, rowH - 2);
+  for (const note of allNotes) {
+    const ny = pitchY(note.midi);
+    for (let k = -1; k <= 1; k++) {
+      const rel = note.time + k * loop - now;
+      const relEnd = rel + note.duration;
+      if (relEnd < -pastSec || rel > futureSec) continue;
+      const nx = timeToX(rel);
+      const nw = Math.max(4, note.duration * pxPerSec);
+      const isActive = rel <= 0 && relEnd > 0;
+      // Attack flash: full at the strike, gone after ~180 ms
+      const flash = isActive ? Math.max(0, 1 - -rel / 0.18) : 0;
 
-    // Note name fixed inside the left edge of the active block, clipped to its width
-    if (isActive && settings.noteNameTags !== false && nw > 14) {
       ctx.save();
-      ctx.beginPath();
-      ctx.rect(nx, ny, nw, nh);
-      ctx.clip();
-      ctx.font = `800 ${Math.min(11, Math.max(8, nh - 4))}px "JetBrains Mono", monospace`;
-      ctx.fillStyle = settings.bgColor || '#0a0502';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(formatNoteName(note.midi, settings.accidental, settings.middleC), nx + 4, ny + nh / 2);
+      if (isActive) {
+        ctx.fillStyle = accent;
+        if (!light) {
+          ctx.shadowColor = notesColor;
+          ctx.shadowBlur = 10 + flash * 14;
+        }
+        const grow = flash * 3;
+        ctx.fillRect(nx, ny - grow, nw, nh + grow * 2);
+      } else {
+        const played = relEnd <= 0;
+        ctx.fillStyle = hexToRgbaStr(notesColor, played ? noteAlpha * 0.4 : noteAlpha);
+        ctx.fillRect(nx, ny, nw, nh);
+      }
       ctx.restore();
-    }
-  });
 
-  // Vertical Playhead Needle
+      if (flash > 0) {
+        // Burst on the strike line at this pitch
+        ctx.fillStyle = light ? hexToRgbaStr(ink, 0.35 * flash) : `rgba(255,255,255,${0.55 * flash})`;
+        ctx.fillRect(strikeX - 2 - flash * 6, ny - 4, 4 + flash * 12, nh + 8);
+      }
+    }
+  }
+  ctx.restore();
+
+  // Fixed strike line
   ctx.save();
   ctx.strokeStyle = ink;
   ctx.lineWidth = 2;
   if (light) {
     ctx.lineCap = 'round';
   } else {
-    ctx.shadowColor = settings.accentColor || '#fde047';
+    ctx.shadowColor = accent;
     ctx.shadowBlur = 12;
   }
   ctx.beginPath();
-  ctx.moveTo(playheadX, y);
-  ctx.lineTo(playheadX, y + h);
+  ctx.moveTo(strikeX, y);
+  ctx.lineTo(strikeX, y + h);
   ctx.stroke();
   ctx.restore();
 

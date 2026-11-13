@@ -5,7 +5,7 @@ const manifest: ModeManifest = {
   name: 'Polar Sequencer',
   kind: 'standalone',
   input: 'midi',
-  description: 'Notes on a rotating disc with a playhead needle.',
+  description: 'Notes on a turning record; each one sounds as it passes the stylus.',
 };
 
 export default manifest;

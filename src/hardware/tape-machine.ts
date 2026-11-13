@@ -1,4 +1,5 @@
 import { roundRect } from '../shared/canvas-utils';
+import { consoleTheme } from './themes';
 import { getCachedImage } from '../shared/assets';
 import { AudioAnalysis } from '../types';
 
@@ -27,8 +28,8 @@ export function drawStudioTapeMachine(
 
   ctx.save();
 
-  const isGold = colorTheme !== 'crimson';
-  const bezelColor = isGold ? 'rgba(212, 175, 55, 0.45)' : 'rgba(239, 68, 68, 0.45)';
+  const T = consoleTheme(colorTheme);
+  const bezelColor = T.tapeBezel;
 
   // 1. Outer Chassis Drop Shadow
   ctx.shadowColor = 'rgba(0, 0, 0, 0.92)';
@@ -143,7 +144,7 @@ export function drawStudioTapeMachine(
     // Bottom bezel glow
     const themeGlow = ctx.createLinearGradient(x, y + h - 18, x, y + h);
     themeGlow.addColorStop(0, 'rgba(0, 0, 0, 0)');
-    themeGlow.addColorStop(1, isGold ? 'rgba(245, 158, 11, 0.12)' : 'rgba(239, 68, 68, 0.12)');
+    themeGlow.addColorStop(1, T.tapeGlow);
     ctx.fillStyle = themeGlow;
     ctx.fillRect(x, y + h - 18, w, 18);
   } else {
@@ -156,7 +157,7 @@ export function drawStudioTapeMachine(
     ctx.fillRect(x, y, w, h);
 
     ctx.font = '700 12px "JetBrains Mono", monospace';
-    ctx.fillStyle = isGold ? '#d4af37' : '#ef4444';
+    ctx.fillStyle = T.tapeLabel;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('• TAPE MACHINE MARK II •', x + w / 2, y + h / 2);

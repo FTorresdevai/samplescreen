@@ -1,7 +1,6 @@
 import { ModeManifest } from '../../../types';
 
-// Base version: the mode card (room, notes, keys, audio view). The matte-black synth chassis
-// needs a third hardware theme; until then the console above uses the default one.
+// Console above the card: matte satin black ST 909 (`synthTheme: 'matte'`).
 const manifest: ModeManifest = {
   id: 'pnd-two',
   name: 'PARTYNEXTDOOR "PARTYNEXTDOOR TWO"',
@@ -9,6 +8,8 @@ const manifest: ModeManifest = {
   input: 'midi',
   description: 'White and silver notes on black, with motion-blur trails at speed.',
   palette: { notesColor: '#f4f6f8', circleColor: '#2a2c30', bgColor: '#000000', accentColor: '#c8ccd2', glowColor: '#ffffff' },
+  synthTheme: 'matte',
+  waveformHardware: 'album-banner',
   defaults: { title: 'PND TWO', bpm: 72 },
 };
 

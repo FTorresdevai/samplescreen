@@ -144,10 +144,10 @@ export const App: React.FC = () => {
     setDetectedAudioInfo(null);
     setSettings((prev) => ({
       ...prev,
-      title: 'FEELS THE SAME',
+      title: 'SAMPLE/BEAT NAME',
       bpm: 80,
-      key: 'CMIN',
-      producerHandle: 'PRODBYSERROT',
+      key: 'KEY',
+      producerHandle: 'PRODUCER NAME',
       isAudioTrimmed: false,
       audioTrimStartBar: 1,
       audioTrimBars: 8,
