@@ -130,7 +130,7 @@ export interface ModelDrawContext {
   analysis: AudioAnalysis;
   settings: VisualizerSettings;
   introInfo?: TimingInfo;
-  albumView: AlbumView;     // resolved view (no MIDI → 'waveform'); read only by album modes
+  albumView: AlbumView;     // resolved view (no MIDI → 'waveform'); read by modes with input 'both'
 }
 
 /**

@@ -20,6 +20,8 @@ const ROWS = 10;
 const MAX_NOTE_TRACKS = 6;
 const ENERGY_BINS = 240;
 
+const NO_NOTES: MidiNote[] = [];
+
 const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
 
 function registerName(centre: number): string {
@@ -306,7 +308,7 @@ function drawToolbar(ctx: CanvasRenderingContext2D, r: Rect, p: PlaylistInput): 
   ctx.font = `bold 12px ${FONT}`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  const menus = ['FILE', 'EDIT', 'ADD', 'CLIPS', 'VIEW', 'OPTIONS', 'TOOLS', 'HELP'];
+  const menus = ['FILE', 'EDIT', 'INSERT', 'CLIPS', 'VIEW', 'MIX', 'HELP'];
   let mx = r.x + 12;
   for (const m of menus) {
     ctx.fillText(m, mx, r.y + 17);
@@ -376,7 +378,7 @@ function drawToolbar(ctx: CanvasRenderingContext2D, r: Rect, p: PlaylistInput): 
   ctx.fillRect(r.x, y3, r.w, 24);
   ctx.fillStyle = '#d4d9de';
   ctx.font = `bold 12px ${FONT}`;
-  ctx.fillText(`Playlist  ›  Arrangement  ›  ${p.title.toUpperCase()}`, r.x + 12, y3 + 12, r.w - 24);
+  ctx.fillText(`Song  ›  Timeline  ›  ${p.title.toUpperCase()}`, r.x + 12, y3 + 12, r.w - 24);
 }
 
 function drawPlaylist(ctx: CanvasRenderingContext2D, inner: Rect, p: PlaylistInput, analysis: ModelDrawContext['analysis']): void {
@@ -487,8 +489,30 @@ function drawClipFrame(ctx: CanvasRenderingContext2D, x0: number, x1: number, la
   return { x: x0, y: top + 15, w: x1 - x0, h: h - 18 };
 }
 
+// Grouping and clips only change with the notes array / tempo / loop, not per frame
+const trackCache = new WeakMap<MidiNote[], PlaylistTrack[]>();
+const clipCache = new WeakMap<MidiNote[], { key: string; clips: Clip[] }>();
+
+function tracksFor(notes: MidiNote[]): PlaylistTrack[] {
+  let tracks = trackCache.get(notes);
+  if (!tracks) {
+    tracks = groupByRegister(notes);
+    trackCache.set(notes, tracks);
+  }
+  return tracks;
+}
+
+function clipsFor(notes: MidiNote[], barLen: number, loop: number): Clip[] {
+  const key = `${barLen}|${loop}`;
+  const hit = clipCache.get(notes);
+  if (hit && hit.key === key) return hit.clips;
+  const clips = buildClips(notes, barLen, loop);
+  clipCache.set(notes, { key, clips });
+  return clips;
+}
+
 function drawNoteTrack(ctx: CanvasRenderingContext2D, track: PlaylistTrack, lane: Rect, p: PlaylistInput, xOf: (t: number) => number): void {
-  const clips = buildClips(track.notes, p.barLen, p.loop);
+  const clips = clipsFor(track.notes, p.barLen, p.loop);
   const span = Math.max(1, track.high - track.low);
   for (const clip of clips) {
     const body = drawClipFrame(ctx, xOf(clip.start), xOf(clip.end), lane, track.name);
@@ -776,7 +800,8 @@ export function drawAeroDesktop(ctx: CanvasRenderingContext2D, context: ModelDra
   const loop = duration > 0 ? duration : (midi?.duration || barLen * 4);
   const now = ((loopTime % loop) + loop) % loop;
   const energy = clamp01(((analysis?.bass ?? 0) * 0.6 + (analysis?.rms ?? 0) * 0.4) * (settings.audioSensitivity || 1));
-  const notes = midi?.notes ?? [];
+  // Audio view (or no MIDI) shows the single energy track instead of note clips
+  const notes = context.albumView === 'midi' ? midi?.notes ?? NO_NOTES : NO_NOTES;
   const title = settings.title?.trim() || 'Untitled';
 
   ctx.save();
@@ -789,7 +814,7 @@ export function drawAeroDesktop(ctx: CanvasRenderingContext2D, context: ModelDra
   const mainWin: Rect = { x: r.x + 18, y: r.y + 40, w: r.w - 36, h: Math.round(r.h * 0.62) };
   const inner = drawGlassWindow(ctx, mainWin, `${title} - Playlist`, (x, y) => drawAppIcon(ctx, x, y));
   drawPlaylist(ctx, inner, {
-    tracks: groupByRegister(notes),
+    tracks: tracksFor(notes),
     loop, now, barLen, bpm, title,
     handle: settings.producerHandle || '',
     notesColor: settings.notesColor || '#7fd1ff',
