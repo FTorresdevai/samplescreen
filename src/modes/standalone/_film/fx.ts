@@ -219,7 +219,7 @@ export function bloom(ctx: CanvasRenderingContext2D, r: Rect, amount: number, ti
   ctx.globalCompositeOperation = 'screen';
   ctx.globalAlpha = Math.min(1, amount);
   ctx.imageSmoothingEnabled = true;
-  ctx.drawImage(s.a, r.x - r.w * 0.01, r.y - r.h * 0.01, r.w * 1.02, r.h * 1.02);
+  ctx.drawImage(s.a, r.x, r.y, r.w, r.h);
   ctx.restore();
 }
 
