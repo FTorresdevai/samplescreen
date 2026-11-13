@@ -176,14 +176,52 @@ test('Trim: Reset functionality restoring original audio and MIDI', () => {
   assert.strictEqual(audioManager.getBuffer()?.duration, 32.0);
 });
 
-test('Trim: snapToBar rounds to the nearest bar boundary and clamps', async () => {
-  const { snapToBar } = await import('../src/core/trim.ts');
-  // 120 BPM → 2 s per bar
-  assert.strictEqual(snapToBar(0, 120, 10), 1);
-  assert.strictEqual(snapToBar(2.9, 120, 10), 2);   // 1.45 bars → boundary 1 → bar 2
-  assert.strictEqual(snapToBar(3.1, 120, 10), 3);   // 1.55 bars → boundary 2 → bar 3
-  assert.strictEqual(snapToBar(-5, 120, 10), 1);    // clamp low
-  assert.strictEqual(snapToBar(999, 120, 10), 11);  // clamp at end boundary (after bar 10)
+test('Trim: snapToGrid snaps to bars or beats', async () => {
+  const { snapToGrid } = await import('../src/core/trim.ts');
+  // 120 BPM → 2 s per bar, 0.5 s per beat
+  assert.strictEqual(snapToGrid(0, 120, 1), 1);
+  assert.strictEqual(snapToGrid(2.9, 120, 1), 2);
+  assert.strictEqual(snapToGrid(3.1, 120, 1), 3);
+  assert.strictEqual(snapToGrid(-5, 120, 1), 1);
+  assert.strictEqual(snapToGrid(2.6, 120, 4), 2.25);
+  assert.strictEqual(snapToGrid(0.3, 120, 4), 1.25);
+});
+
+test('Trim: barsAvailable and fitSelection keep the loop inside the audio', async () => {
+  const { barsAvailable, fitSelection } = await import('../src/core/trim.ts');
+  // 17 s at 120 BPM → 8.5 bars
+  assert.strictEqual(barsAvailable(1, 17, 120), 8);
+  assert.strictEqual(barsAvailable(1.5, 17, 120), 8);
+  assert.strictEqual(barsAvailable(1.75, 17, 120), 7);
+  assert.deepStrictEqual(fitSelection({ start: 7, bars: 4 }, 17, 120, 1), { start: 5, bars: 4 });
+  assert.deepStrictEqual(fitSelection({ start: 7, bars: 4 }, 17, 120, 4), { start: 5.5, bars: 4 });
+  assert.deepStrictEqual(fitSelection({ start: 1, bars: 16 }, 17, 120, 1), { start: 1, bars: 8 });
+  assert.deepStrictEqual(fitSelection({ start: -3, bars: 0 }, 17, 120, 1), { start: 1, bars: 1 });
+  // Shorter than one bar: one bar from the start
+  assert.deepStrictEqual(fitSelection({ start: 2, bars: 2 }, 1, 120, 1), { start: 1, bars: 1 });
+});
+
+test('Trim: zoomView keeps the anchor in place and clampView stays inside the audio', async () => {
+  const { zoomView, clampView, MAX_TRIM_ZOOM } = await import('../src/core/trim.ts');
+  const v = zoomView({ zoom: 1, offset: 0 }, 2, 50, 100);   // anchor mid-view
+  assert.deepStrictEqual(v, { zoom: 2, offset: 25 });
+  assert.deepStrictEqual(clampView({ zoom: 4, offset: 90 }, 100), { zoom: 4, offset: 75 });
+  assert.deepStrictEqual(clampView({ zoom: 0.5, offset: -3 }, 100), { zoom: 1, offset: 0 });
+  assert.strictEqual(zoomView({ zoom: 16, offset: 0 }, 8, 0, 100).zoom, MAX_TRIM_ZOOM);
+});
+
+test('Trim: trimToBars accepts a beat-snapped start', () => {
+  const sampleRate = 44100;
+  const raw = createMockAudioBuffer(2, 16 * sampleRate, sampleRate);   // 8 bars at 120 BPM
+  const manager = new AudioManager();
+  manager.setBuffer(raw);
+  const result = manager.trimToBars(2.25, 4, 120);
+  assert.ok(result);
+  assert.strictEqual(result.startSec, 2.5);
+  assert.strictEqual(result.totalBars, 4);
+  assert.strictEqual(manager.getDuration(), 8);
+  // 6.5 bars left from 2.5 → at most 6 whole bars
+  assert.strictEqual(manager.trimToBars(2.5, 16, 120)?.totalBars, 6);
 });
 
 test('Trim: computePeaks length, silence and full scale', async () => {

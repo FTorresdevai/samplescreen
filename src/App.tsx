@@ -4,6 +4,7 @@ import { Dropzone } from './components/Dropzone';
 import { CanvasPreview } from './components/CanvasPreview';
 import { PlaybackControls } from './components/PlaybackControls';
 import { Sidebar } from './components/sidebar/Sidebar';
+import { TrimEditor } from './components/trim/TrimEditor';
 import { ExportModal } from './components/ExportModal';
 import { CanvasRenderer } from './engine/renderer';
 import { audioManager } from './engine/audio';
@@ -77,6 +78,7 @@ export const App: React.FC = () => {
   const [detectedAudioInfo, setDetectedAudioInfo] = useState<string | null>(null);
   const [midiFileName, setMidiFileName] = useState<string | null>('demo_progression.mid');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true); // Open by default!
+  const [isTrimOpen, setIsTrimOpen] = useState(urlParams?.get('trim') === '1'); // ?trim=1 opens the editor (visual testing)
 
   // Explicit source state tracking ('demo' | 'file')
   const [audioSource, setAudioSource] = useState<'demo' | 'file'>('demo');
@@ -272,18 +274,20 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleTrimAudio = (startBar: number, numBars: number) => {
+  /** `bpm` is passed when the trim editor changes the tempo and the trim in one step. */
+  const handleTrimAudio = (startBar: number, numBars: number, bpm: number = settings.bpm) => {
     // Preserve untrimmed original MIDI before applying trim
     if (!originalMidiDataRef.current) {
       originalMidiDataRef.current = midiData;
     }
     const baseMidi = originalMidiDataRef.current;
 
-    const result = audioManager.trimToBars(startBar, numBars, settings.bpm);
+    const result = audioManager.trimToBars(startBar, numBars, bpm);
     if (result) {
       setAudioDuration(result.durationSec);
       setSettings((prev) => ({
         ...prev,
+        bpm,
         audioTrimStartBar: startBar,
         audioTrimBars: result.totalBars,
         loopBars: result.totalBars,
@@ -525,6 +529,17 @@ export const App: React.FC = () => {
             />
           </div>
 
+          {isTrimOpen && (
+            <TrimEditor
+              settings={settings}
+              rawAudioDuration={audioManager.getRawDuration() || audioDuration}
+              onTrimAudio={handleTrimAudio}
+              onResetAudioTrim={handleResetAudioTrim}
+              onUpdate={handleUpdateSettings}
+              onClose={() => setIsTrimOpen(false)}
+            />
+          )}
+
           {/* Bottom Playback Controls */}
           <PlaybackControls
             audioManager={audioManager}
@@ -549,8 +564,8 @@ export const App: React.FC = () => {
           onLoadDemoIntro={handleLoadDemoIntro}
           midiData={midiData}
           audioDuration={audioDuration || audioManager.getDuration()}
-          rawAudioDuration={audioManager.getRawDuration() || audioDuration}
-          onTrimAudio={handleTrimAudio}
+          isTrimOpen={isTrimOpen}
+          onToggleTrim={setIsTrimOpen}
           onResetAudioTrim={handleResetAudioTrim}
         />
 

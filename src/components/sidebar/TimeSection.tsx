@@ -10,11 +10,11 @@ interface TimeSectionProps {
   onUpdate: (updates: Partial<VisualizerSettings>) => void;
   midiData?: ParsedMidi | null;
   audioDuration?: number;
-  rawAudioDuration?: number;
+  isTrimOpen?: boolean;
+  onToggleTrim?: (open: boolean) => void;
   introMidiFileName?: string | null;
   onIntroMidiSelected?: (file: File) => void;
   onLoadDemoIntro?: () => void;
-  onTrimAudio?: (startBar: number, numBars: number) => void;
   onResetAudioTrim?: () => void;
 }
 
@@ -24,11 +24,11 @@ export const TimeSection: React.FC<TimeSectionProps> = ({
   onUpdate,
   midiData,
   audioDuration,
-  rawAudioDuration,
+  isTrimOpen,
+  onToggleTrim,
   introMidiFileName,
   onIntroMidiSelected,
   onLoadDemoIntro,
-  onTrimAudio,
   onResetAudioTrim,
 }) => {
   // Loop length options: 4 / 8 / 16 plus the lengths detected from the MIDI file and the audio
@@ -43,8 +43,8 @@ export const TimeSection: React.FC<TimeSectionProps> = ({
 
       <TrimSection
         settings={settings}
-        rawAudioDuration={rawAudioDuration}
-        onTrimAudio={onTrimAudio}
+        isTrimOpen={isTrimOpen}
+        onToggleTrim={onToggleTrim}
         onResetAudioTrim={onResetAudioTrim}
       />
 

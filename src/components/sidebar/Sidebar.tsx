@@ -14,11 +14,11 @@ interface SidebarProps {
   isExporting?: boolean;
   midiData?: ParsedMidi | null;
   audioDuration?: number;
-  rawAudioDuration?: number;
+  isTrimOpen?: boolean;
+  onToggleTrim?: (open: boolean) => void;
   introMidiFileName?: string | null;
   onIntroMidiSelected?: (file: File) => void;
   onLoadDemoIntro?: () => void;
-  onTrimAudio?: (startBar: number, numBars: number) => void;
   onResetAudioTrim?: () => void;
 }
 

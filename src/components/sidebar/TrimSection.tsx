@@ -1,47 +1,31 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { VisualizerSettings } from '../../types';
-import { audioManager } from '../../engine/audio';
-import { secondsPerBar } from '../../core/trim';
 import { Toggle } from '../ui';
-import { TrimWaveform } from './TrimWaveform';
 
 interface TrimSectionProps {
   settings: VisualizerSettings;
-  rawAudioDuration?: number;   // changes when a new file loads → re-reads the raw buffer
-  onTrimAudio?: (startBar: number, numBars: number) => void;
+  isTrimOpen?: boolean;
+  onToggleTrim?: (open: boolean) => void;
   onResetAudioTrim?: () => void;
 }
 
-/** One toggle, one waveform with draggable handles, one reset. */
-export const TrimSection: React.FC<TrimSectionProps> = ({ settings, rawAudioDuration, onTrimAudio, onResetAudioTrim }) => {
-  const [open, setOpen] = useState(settings.isAudioTrimmed === true);
-  const rawBuffer = rawAudioDuration ? audioManager.getRawBuffer() : null;
-
-  return (
-    <div className="space-y-2">
-      <Toggle checked={open} onChange={setOpen} label="Trim" />
-
-      {open && (
-        <>
-          <TrimWaveform
-            buffer={rawBuffer}
-            bpm={settings.bpm || 80}
-            startBar={settings.isAudioTrimmed ? settings.audioTrimStartBar || 1 : 1}
-            bars={settings.isAudioTrimmed ? settings.audioTrimBars || 1 : Math.max(1, Math.floor((rawBuffer?.duration ?? 0) / secondsPerBar(settings.bpm)))}
-            accentColor="#e69d45"
-            onCommit={(start, bars) => onTrimAudio?.(start, bars)}
-          />
-          {settings.isAudioTrimmed && (
-            <button
-              type="button"
-              onClick={() => onResetAudioTrim?.()}
-              className="text-[11px] text-muted hover:text-text underline underline-offset-2"
-            >
-              Reset trim
-            </button>
-          )}
-        </>
-      )}
-    </div>
-  );
-};
+/** Opens the wide trim editor (components/trim) and shows what is currently trimmed. */
+export const TrimSection: React.FC<TrimSectionProps> = ({ settings, isTrimOpen, onToggleTrim, onResetAudioTrim }) => (
+  <div className="space-y-1.5">
+    <Toggle checked={isTrimOpen === true} onChange={(open) => onToggleTrim?.(open)} label="Trim editor" />
+    {settings.isAudioTrimmed && (
+      <div className="flex items-center justify-between">
+        <span className="rounded bg-well border border-line px-2 py-1 font-mono text-[10px] text-text">
+          {settings.audioTrimBars} {settings.audioTrimBars === 1 ? 'bar' : 'bars'} from bar {settings.audioTrimStartBar || 1}
+        </span>
+        <button
+          type="button"
+          onClick={() => onResetAudioTrim?.()}
+          className="text-[11px] text-muted hover:text-text underline underline-offset-2"
+        >
+          Reset trim
+        </button>
+      </div>
+    )}
+  </div>
+);
