@@ -1,318 +1,274 @@
-import { ModelDrawContext, ModeModule, ParsedMidi } from '../../../types';
+import { MidiNote, ModelDrawContext, ModeModule, ParsedMidi } from '../../../types';
 import { formatNoteName } from '../../../engine/chords';
-import { DEFAULT_INK, darken, hexToRgbaStr, isLightTone } from '../../../engine/palettes';
+import { darken, hexToRgbaStr, isLightTone } from '../../../engine/palettes';
 import { roundRect } from '../../../shared/canvas-utils';
-import { visibleNotes } from '../../albums/_shell/waterfall';
+import { drawSynth, GRAPHITE, hash, LitKey } from './synth';
 
 /**
- * Wax Keys: a full-width upright piano at the bottom, MIDI notes falling onto it.
- * A key goes down and lights up the instant its note lands, with a short attack flash and a
- * warm reflection on the felt strip. No shadowBlur anywhere (halo shapes instead), so it stays
- * cheap at 60 FPS and follows the light-palette rules for free.
+ * Graphite Synth: cream paper with grain, an original hand-drawn vintage synth whose keys light
+ * up in the note's colour, and a piano roll of "pill" notes below it: outlined before the
+ * playhead, filled once played. Active pitches are tagged at the left and the current chord is
+ * written out underneath (e.g. "F2 · E4 · G4 · C5 · E5").
  */
 
-const WHITE_PCS = [0, 2, 4, 5, 7, 9, 11];
-const isBlack = (p: number) => !WHITE_PCS.includes(((p % 12) + 12) % 12);
-// Black keys sit slightly off the white-key seam, like a real keyboard
-const BLACK_SHIFT: Record<number, number> = { 1: -0.12, 3: 0.12, 6: -0.14, 8: 0, 10: 0.14 };
+const PAPER = '#efe9db';
 
-interface Keyboard {
-  lo: number;
-  hi: number;
-  whiteW: number;
-  blackW: number;
-  /** Left edge of the key in px relative to the keyboard's x. */
-  left: (p: number) => number;
-  width: (p: number) => number;
+/** Muted ink colours by register: bass teal, low-mid ochre, mid terracotta, high periwinkle. */
+export function noteColor(midi: number): string {
+  if (midi < 48) return '#5c9a8b';
+  if (midi < 60) return '#c9a14a';
+  if (midi < 72) return '#c4785c';
+  return '#7b8fd1';
 }
 
-/** Whole octaves around the notes, at least two, clamped to the 88 keys. */
-const rangeCache = new WeakMap<ParsedMidi, { lo: number; hi: number }>();
-function keyRange(midi: ParsedMidi) {
+interface WindowNote { note: MidiNote; relStart: number; relEnd: number }
+
+/** Notes between `past` seconds ago and `future` seconds ahead, with loop-seam copies. */
+function windowNotes(context: ModelDrawContext, past: number, future: number): WindowNote[] {
+  const { currentTime, loopTime, duration, midi, settings, introInfo } = context;
+  const hasIntro = introInfo?.hasIntro ?? introInfo?.isIntro ?? false;
+  const isIntro = introInfo?.isIntro ?? false;
+  const secondsPerBar = (60 / (settings.bpm || midi.bpm || 80)) * 4;
+  const introDuration = introInfo?.introDuration ?? (hasIntro ? (introInfo?.totalIntroBars || 1) * secondsPerBar : 0);
+  const loopDuration = duration || 16;
+  const mainLoopDuration = introInfo?.mainLoopDuration ?? loopDuration;
+  const now = typeof loopTime === 'number' && !isNaN(loopTime) ? loopTime : currentTime % loopDuration;
+
+  const out: WindowNote[] = [];
+  for (const note of midi.notes || []) {
+    const inMainLoop = hasIntro && !isIntro && note.time >= introDuration;
+    const period = inMainLoop ? mainLoopDuration : loopDuration;
+    const offsets = !hasIntro || inMainLoop ? [-1, 0, 1] : [0];
+    for (const k of offsets) {
+      const relStart = note.time + k * period - now;
+      const relEnd = relStart + note.duration;
+      if (relEnd < -past || relStart > future) continue;
+      out.push({ note, relStart, relEnd });
+    }
+  }
+  return out;
+}
+
+/** Chord line: pitches sorted low → high, joined with middle dots. */
+export function chordText(pitches: number[], accidental: 'sharp' | 'flat' = 'sharp', middleC: 3 | 4 | 5 = 4): string {
+  return [...new Set(pitches)].sort((a, b) => a - b).map(p => formatNoteName(p, accidental, middleC)).join(' · ');
+}
+
+const rangeCache = new WeakMap<ParsedMidi, { lo: number; hi: number; kbLo: number; kbHi: number }>();
+function ranges(midi: ParsedMidi) {
   let r = rangeCache.get(midi);
   if (!r) {
     const notes = midi.notes || [];
-    const min = notes.length ? Math.min(...notes.map(n => n.midi)) : 48;
-    const max = notes.length ? Math.max(...notes.map(n => n.midi)) : 71;
-    let lo = min - (min % 12);
-    let hi = max + (11 - (max % 12));
-    while (hi - lo + 1 < 24) hi += 12;
-    lo = Math.max(21, lo);
-    hi = Math.min(108, hi);
-    r = { lo, hi };
+    let lo = notes.length ? Math.min(...notes.map(n => n.midi)) : 48;
+    let hi = notes.length ? Math.max(...notes.map(n => n.midi)) : 72;
+    // Keyboard: whole octaves around the notes, at least three, clamped to 88 keys
+    let kbLo = lo - (lo % 12);
+    let kbHi = hi + (11 - (hi % 12));
+    while (kbHi - kbLo + 1 < 36) kbHi += 12;
+    kbLo = Math.max(21, kbLo);
+    kbHi = Math.min(108, kbHi);
+    // Roll: the notes' span, one semitone of air each side, at least an octave tall
+    lo -= 1; hi += 1;
+    while (hi - lo < 12) { lo -= 1; hi += 1; }
+    r = { lo, hi, kbLo, kbHi };
     rangeCache.set(midi, r);
   }
   return r;
 }
 
-function buildKeyboard(midi: ParsedMidi, width: number): Keyboard {
-  const { lo, hi } = keyRange(midi);
-  const whiteIndex = new Map<number, number>();
-  let n = 0;
-  for (let p = lo; p <= hi; p++) if (!isBlack(p)) whiteIndex.set(p, n++);
-  const whiteW = width / n;
-  const blackW = whiteW * 0.6;
-  return {
-    lo,
-    hi,
-    whiteW,
-    blackW,
-    left: (p) => {
-      if (!isBlack(p)) return (whiteIndex.get(p) ?? 0) * whiteW;
-      const seam = ((whiteIndex.get(p - 1) ?? 0) + 1) * whiteW;
-      return seam - blackW / 2 + (BLACK_SHIFT[p % 12] ?? 0) * blackW;
-    },
-    width: (p) => (isBlack(p) ? blackW : whiteW),
-  };
+const paperCache = new Map<string, HTMLCanvasElement>();
+/** Cream sheet with warm vignette, speckle grain and faint fibres (cached per size and tint). */
+function paperLayer(w: number, h: number, tint: string): HTMLCanvasElement | null {
+  if (typeof document === 'undefined') return null;
+  const key = `${w}x${h}|${tint}`;
+  let c = paperCache.get(key);
+  if (!c) {
+    c = document.createElement('canvas');
+    c.width = Math.ceil(w);
+    c.height = Math.ceil(h);
+    const g = c.getContext('2d');
+    if (g) {
+      g.fillStyle = tint;
+      g.fillRect(0, 0, w, h);
+      const v = g.createRadialGradient(w / 2, h * 0.4, Math.min(w, h) * 0.2, w / 2, h / 2, Math.max(w, h) * 0.75);
+      v.addColorStop(0, 'rgba(255,252,240,0.35)');
+      v.addColorStop(1, 'rgba(120,95,60,0.16)');
+      g.fillStyle = v;
+      g.fillRect(0, 0, w, h);
+      const count = Math.floor((w * h) / 40);
+      for (let i = 0; i < count; i++) {
+        const a = hash(i * 2 + 0.5);
+        g.fillStyle = a > 0.5 ? `rgba(90,70,45,${0.04 + (a - 0.5) * 0.12})` : `rgba(255,255,250,${0.05 + a * 0.12})`;
+        g.fillRect(hash(i * 5 + 1) * w, hash(i * 7 + 3) * h, 1, 1);
+      }
+      g.strokeStyle = 'rgba(110,90,60,0.05)';
+      g.lineWidth = 0.7;
+      for (let i = 0; i < 90; i++) {
+        const fx = hash(i * 11 + 9) * w;
+        const fy = hash(i * 13 + 4) * h;
+        const len = 8 + hash(i * 17) * 26;
+        const ang = (hash(i * 19) - 0.5) * 0.8;
+        g.beginPath();
+        g.moveTo(fx, fy);
+        g.quadraticCurveTo(fx + len / 2, fy + (hash(i) - 0.5) * 4, fx + Math.cos(ang) * len, fy + Math.sin(ang) * len);
+        g.stroke();
+      }
+    }
+    if (paperCache.size > 6) paperCache.clear();
+    paperCache.set(key, c);
+  }
+  return c;
 }
 
-interface Press { age: number; velocity: number }
-
-export function drawPianoWaterfall(ctx: CanvasRenderingContext2D, context: ModelDrawContext) {
+export function drawGraphiteSynth(ctx: CanvasRenderingContext2D, context: ModelDrawContext) {
   const { region, midi, settings } = context;
   const { x, y, width: w, height: h } = region;
-  const light = isLightTone(settings);
-  const ink = settings.inkColor || DEFAULT_INK;
-  const notesColor = settings.notesColor || '#e69d45';
-  const accent = settings.accentColor || '#ecdcb9';
-  const glow = settings.glowColor || notesColor;
-
-  const kb = buildKeyboard(midi, w);
-  const kbH = Math.min(240, Math.max(110, h * 0.2), kb.whiteW * 6.5);
-  const railH = 18;                         // wooden key slip above the keys
-  const feltH = 5;
-  const kbY = y + h - kbH;
-  const strikeY = kbY - railH - feltH;      // where notes land
-  const fallTop = y;
-  const fallH = strikeY - fallTop;
-  const bpm = settings.bpm || midi.bpm || 90;
-  const lookahead = Math.max(1.6, Math.min(4, (60 / bpm) * 6));   // ~1.5 bars on screen
-  const pxPerSec = fallH / lookahead;
-
-  const falling = visibleNotes(context, lookahead);
-  const pressed = new Map<number, Press>();
-  for (const f of falling) {
-    if (!f.isActive) continue;
-    const prev = pressed.get(f.note.midi);
-    const age = -f.relStart;
-    if (!prev || age < prev.age) pressed.set(f.note.midi, { age, velocity: f.note.velocity });
-  }
+  const accidental = settings.accidental;
+  const middleC = settings.middleC;
+  const name = (p: number) => formatNoteName(p, accidental, middleC);
+  const { lo, hi, kbLo, kbHi } = ranges(midi);
 
   ctx.save();
 
-  // ---------- Lanes ----------
-  ctx.fillStyle = hexToRgbaStr(ink, light ? 0.05 : 0.025);
-  for (let p = kb.lo; p <= kb.hi; p++) {
-    if (isBlack(p)) ctx.fillRect(x + kb.left(p), fallTop, kb.blackW, fallH);
-  }
-  ctx.fillStyle = hexToRgbaStr(ink, light ? 0.22 : 0.09);
-  for (let p = kb.lo; p <= kb.hi; p++) {
-    if (p % 12 === 0) ctx.fillRect(Math.round(x + kb.left(p)), fallTop, 1, fallH);
+  // ---------- Paper ----------
+  const tint = isLightTone(settings) && settings.bgColor ? settings.bgColor : PAPER;
+  ctx.save();
+  roundRect(ctx, x, y, w, h, 18, false, false);
+  ctx.clip();
+  const paper = paperLayer(w, h, tint);
+  if (paper) ctx.drawImage(paper, x, y);
+  else { ctx.fillStyle = tint; ctx.fillRect(x, y, w, h); }
+  ctx.restore();
+
+  // ---------- Time window ----------
+  const bpm = settings.bpm || midi.bpm || 90;
+  const span = Math.max(3, Math.min(8, (240 / bpm) * 2));
+  const rollLeft = x + 92;
+  const rollRight = x + w - 44;
+  const rollW = rollRight - rollLeft;
+  const playX = rollLeft + rollW * 0.26;
+  const pxPerSec = rollW / span;
+  const past = (playX - rollLeft) / pxPerSec;
+  const future = (rollRight - playX) / pxPerSec;
+  const notes = windowNotes(context, past, future);
+
+  const active = notes.filter(n => n.relStart <= 0 && n.relEnd >= 0);
+  const lit = new Map<number, LitKey>();
+  for (const n of active) {
+    const prev = lit.get(n.note.midi);
+    const age = -n.relStart;
+    if (!prev || age < prev.age) lit.set(n.note.midi, { color: noteColor(n.note.midi), label: name(n.note.midi), age });
   }
 
-  // ---------- Light shafts above pressed keys (dark palettes only) ----------
-  if (!light) {
-    for (const [p, press] of pressed) {
-      const kx = x + kb.left(p);
-      const kw = kb.width(p);
-      const shaftH = fallH * (0.35 + press.velocity * 0.3);
-      const g = ctx.createLinearGradient(0, strikeY, 0, strikeY - shaftH);
-      g.addColorStop(0, hexToRgbaStr(glow, 0.22));
-      g.addColorStop(1, hexToRgbaStr(glow, 0));
-      ctx.fillStyle = g;
-      ctx.fillRect(kx - kw * 0.2, strikeY - shaftH, kw * 1.4, shaftH);
-    }
-  }
+  // ---------- Synth ----------
+  const sw = w * 0.9;
+  const sh = Math.min(sw * 0.36, h * 0.3);
+  const sy = y + 46;
+  drawSynth(ctx, { x: Math.round(x + (w - sw) / 2), y: Math.round(sy), w: Math.round(sw), h: Math.round(sh), lo: kbLo, hi: kbHi }, lit, settings.noteNameTags !== false);
 
-  // ---------- Falling notes ----------
+  // ---------- Piano roll ----------
+  const rollTop = sy + sh + 64;
+  const rollBottom = y + h - 150;
+  const rows = hi - lo + 1;
+  const rowH = (rollBottom - rollTop) / rows;
+  const rowY = (p: number) => rollTop + (hi - p + 0.5) * rowH;
+
+  // Faint staff: one hairline per row, slightly stronger on C
+  for (let p = lo; p <= hi; p++) {
+    ctx.fillStyle = hexToRgbaStr(GRAPHITE, p % 12 === 0 ? 0.1 : 0.035);
+    ctx.fillRect(rollLeft, Math.round(rowY(p)), rollW, 1);
+  }
+  ctx.fillStyle = hexToRgbaStr(GRAPHITE, 0.55);
+  ctx.fillRect(rollLeft, Math.round(rollTop) - 1, rollW, 1.5);
+  ctx.fillRect(rollLeft, Math.round(rollBottom), rollW, 1.5);
+
+  const pillH = Math.max(4, Math.min(11, rowH * 0.7));
   ctx.save();
   ctx.beginPath();
-  ctx.rect(x, fallTop, w, fallH);
+  ctx.rect(rollLeft, rollTop, rollW, rollBottom - rollTop);
   ctx.clip();
-  const blackNoteColor = light ? darken(notesColor, 0.7) : darken(notesColor, 0.72);
-  for (const f of falling) {
-    const p = f.note.midi;
-    if (p < kb.lo || p > kb.hi) continue;
-    const top = Math.max(fallTop - 4, strikeY - f.relEnd * pxPerSec);
-    const bottom = Math.min(strikeY, strikeY - f.relStart * pxPerSec);
-    const nh = Math.max(3, bottom - top);
-    const inset = isBlack(p) ? 1 : Math.max(1.5, kb.whiteW * 0.1);
-    const nx = x + kb.left(p) + inset;
-    const nw = kb.width(p) - inset * 2;
-    const radius = Math.min(5, nw / 3, nh / 2);
-    const base = isBlack(p) ? blackNoteColor : notesColor;
-
-    if (f.isActive) {
-      const grad = ctx.createLinearGradient(0, top, 0, bottom);
-      grad.addColorStop(0, hexToRgbaStr(base, 0.95));
-      grad.addColorStop(1, accent);
-      ctx.fillStyle = grad;
-    } else {
-      ctx.fillStyle = hexToRgbaStr(base, light ? 0.92 : 0.6 + f.note.velocity * 0.35);
+  for (const n of notes) {
+    const p = n.note.midi;
+    if (p < lo || p > hi) continue;
+    const nx = playX + n.relStart * pxPerSec;
+    const nw = Math.max(pillH, n.note.duration * pxPerSec - 2);
+    const ny = rowY(p) - pillH / 2;
+    const color = noteColor(p);
+    const r = pillH / 2;
+    // Unplayed: paper-filled outline
+    if (nx + nw > playX) {
+      ctx.fillStyle = hexToRgbaStr(tint, 0.85);
+      roundRect(ctx, nx, ny, nw, pillH, r, true, false);
     }
-    roundRect(ctx, nx, top, nw, nh, radius, true, false);
-    // Glossy edge: thin highlight on the left, darker edge on the right
-    ctx.fillStyle = light ? hexToRgbaStr(ink, 0.18) : 'rgba(255,255,255,0.18)';
-    ctx.fillRect(nx + 1, top + radius, 1.2, Math.max(0, nh - radius * 2));
-
-    if (f.isActive && settings.noteNameTags !== false && nh > 18 && nw > 12) {
-      ctx.font = `800 ${Math.min(11, Math.max(8, nw * 0.42))}px "JetBrains Mono", monospace`;
-      ctx.fillStyle = settings.bgColor || '#141113';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'bottom';
-      ctx.fillText(formatNoteName(p, settings.accidental, settings.middleC), nx + nw / 2, strikeY - 4, nw - 2);
+    // Played part: filled with the note's colour up to the playhead
+    if (nx < playX) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(nx - 1, ny - 2, Math.min(nw + 2, playX - nx + 1), pillH + 4);
+      ctx.clip();
+      ctx.fillStyle = hexToRgbaStr(color, 0.88);
+      roundRect(ctx, nx, ny, nw, pillH, r, true, false);
+      ctx.restore();
     }
+    const sounding = n.relStart <= 0 && n.relEnd >= 0;
+    ctx.strokeStyle = sounding ? GRAPHITE : darken(color, 0.75);
+    ctx.lineWidth = sounding ? 1.6 : 1.1;
+    roundRect(ctx, nx, ny, nw, pillH, r, false, true);
   }
   ctx.restore();
 
-  // ---------- Attack flashes at the strike line ----------
-  for (const [p, press] of pressed) {
-    const flash = Math.max(0, 1 - press.age / 0.2);
-    if (flash <= 0) continue;
-    const cx = x + kb.left(p) + kb.width(p) / 2;
-    const spread = kb.width(p) * (0.8 + (1 - flash) * 1.4);
-    if (light) {
-      ctx.strokeStyle = hexToRgbaStr(ink, 0.6 * flash);
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.ellipse(cx, strikeY, spread, 6 + (1 - flash) * 6, 0, 0, Math.PI * 2);
-      ctx.stroke();
-    } else {
-      ctx.fillStyle = hexToRgbaStr(glow, 0.35 * flash);
-      ctx.beginPath();
-      ctx.ellipse(cx, strikeY, spread, 10 + (1 - flash) * 10, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = `rgba(255,255,255,${0.7 * flash})`;
-      ctx.fillRect(cx - spread * 0.5, strikeY - 1.5, spread, 3);
-    }
-  }
+  // Playhead
+  ctx.fillStyle = GRAPHITE;
+  ctx.fillRect(Math.round(playX), rollTop - 10, 1.4, rollBottom - rollTop + 20);
 
-  drawPiano(ctx, context, kb, pressed, { x, kbY, kbH, railH, feltH, strikeY, w, light, ink, notesColor, accent, glow });
-  ctx.restore();
-}
-
-interface PianoStyle {
-  x: number; kbY: number; kbH: number; railH: number; feltH: number; strikeY: number; w: number;
-  light: boolean; ink: string; notesColor: string; accent: string; glow: string;
-}
-
-/** Felt strip, wooden key slip, ivory and ebony keys, front lips. Pressed keys sink and light up. */
-function drawPiano(ctx: CanvasRenderingContext2D, context: ModelDrawContext, kb: Keyboard, pressed: Map<number, Press>, s: PianoStyle) {
-  const { x, kbY, kbH, railH, feltH, strikeY, w, light, ink, notesColor, accent, glow } = s;
-  const settings = context.settings;
-
-  // Felt: burgundy on dark palettes, the palette accent on light (printed look)
-  const felt = light ? accent : '#6e1f2b';
-  ctx.fillStyle = felt;
-  ctx.fillRect(x, strikeY, w, feltH);
-  // Reflection of each pressed key on the felt
-  for (const [p, press] of pressed) {
-    const cx = x + kb.left(p) + kb.width(p) / 2;
-    const rw = kb.width(p) * 2.2;
-    const g = ctx.createRadialGradient(cx, strikeY + feltH / 2, 0, cx, strikeY + feltH / 2, rw);
-    g.addColorStop(0, light ? hexToRgbaStr(ink, 0.35) : hexToRgbaStr(glow, 0.45 + press.velocity * 0.3));
-    g.addColorStop(1, light ? hexToRgbaStr(ink, 0) : hexToRgbaStr(glow, 0));
-    ctx.fillStyle = g;
-    ctx.fillRect(cx - rw, strikeY, rw * 2, feltH);
-  }
-
-  // Key slip: polished wood (dark) or a flat ink rail (light)
-  const railY = strikeY + feltH;
-  if (light) {
-    ctx.fillStyle = ink;
-    ctx.fillRect(x, railY, w, railH);
-  } else {
-    const wood = ctx.createLinearGradient(0, railY, 0, railY + railH);
-    wood.addColorStop(0, '#3a2418');
-    wood.addColorStop(0.45, '#24150d');
-    wood.addColorStop(1, '#110904');
-    ctx.fillStyle = wood;
-    ctx.fillRect(x, railY, w, railH);
-    ctx.fillStyle = 'rgba(255,225,190,0.18)';
-    ctx.fillRect(x, railY + 1, w, 1);
-  }
-  ctx.font = '600 8px "JetBrains Mono", monospace';
-  ctx.letterSpacing = '4px';
-  ctx.fillStyle = light ? hexToRgbaStr(settings.bgColor || '#f4f2ec', 0.8) : 'rgba(230,200,150,0.55)';
-  ctx.textAlign = 'center';
+  // ---------- Pitch labels at left ----------
   ctx.textBaseline = 'middle';
-  ctx.fillText('WAX KEYS', x + w / 2, railY + railH / 2 + 0.5);
-  ctx.letterSpacing = '0px';
-
-  const lip = Math.max(5, kbH * 0.05);
-  const dip = 3;
-
-  // White keys
-  for (let p = kb.lo; p <= kb.hi; p++) {
-    if (isBlack(p)) continue;
-    const kx = x + kb.left(p);
-    const kw = kb.whiteW;
-    const down = pressed.get(p);
-    const bodyH = kbH - lip + (down ? dip : 0);
-    const g = ctx.createLinearGradient(0, kbY, 0, kbY + bodyH);
-    if (down) {
-      const flash = Math.max(0, 1 - down.age / 0.25);
-      g.addColorStop(0, light ? hexToRgbaStr(notesColor, 0.75) : hexToRgbaStr(accent, 0.95));
-      g.addColorStop(0.55, hexToRgbaStr(notesColor, 0.85 + flash * 0.15));
-      g.addColorStop(1, hexToRgbaStr(notesColor, 1));
-    } else if (light) {
-      g.addColorStop(0, '#fbfaf6');
-      g.addColorStop(1, '#ecebe4');
-    } else {
-      g.addColorStop(0, '#d9d2c3');
-      g.addColorStop(0.08, '#f4efe2');
-      g.addColorStop(1, '#e6dfcf');
-    }
-    ctx.fillStyle = g;
-    ctx.fillRect(kx, kbY, kw, bodyH);
-    // Front lip (shorter when pressed: the key tilts down)
-    ctx.fillStyle = down ? darken(notesColor, 0.7) : light ? '#d8d6cd' : '#bfb6a3';
-    ctx.fillRect(kx, kbY + bodyH, kw, kbH - bodyH);
-    // Seam
-    ctx.fillStyle = light ? hexToRgbaStr(ink, 0.55) : 'rgba(30,20,12,0.55)';
-    ctx.fillRect(kx, kbY, 1, kbH);
-  }
-  ctx.fillStyle = light ? hexToRgbaStr(ink, 0.55) : 'rgba(30,20,12,0.55)';
-  ctx.fillRect(x + w - 1, kbY, 1, kbH);
-
-  // Shadow of the key slip on the keys
-  const shade = ctx.createLinearGradient(0, kbY, 0, kbY + 10);
-  shade.addColorStop(0, light ? hexToRgbaStr(ink, 0.18) : 'rgba(0,0,0,0.45)');
-  shade.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = shade;
-  ctx.fillRect(x, kbY, w, 10);
-
-  // Black keys
-  const blackH = kbH * 0.62;
-  for (let p = kb.lo; p <= kb.hi; p++) {
-    if (!isBlack(p)) continue;
-    const kx = x + kb.left(p);
-    const kw = kb.blackW;
-    const down = pressed.get(p);
-    // Contact shadow on the white keys (offset rect, no blur)
-    ctx.fillStyle = light ? hexToRgbaStr(ink, 0.12) : 'rgba(0,0,0,0.35)';
-    ctx.fillRect(kx + 2, kbY, kw, blackH + (down ? 1 : 4));
-
-    if (down) {
-      const g = ctx.createLinearGradient(0, kbY, 0, kbY + blackH);
-      g.addColorStop(0, darken(notesColor, 0.55));
-      g.addColorStop(0.7, notesColor);
-      g.addColorStop(1, light ? notesColor : accent);
-      ctx.fillStyle = g;
-      roundRect(ctx, kx, kbY - 1, kw, blackH + 1, 2, true, false);
-    } else {
-      ctx.fillStyle = light ? ink : '#0d0b0a';
-      roundRect(ctx, kx, kbY - 1, kw, blackH + 1, 2, true, false);
-      // Top face (the lacquered surface) with a highlight; the front bevel is lower down
-      const top = ctx.createLinearGradient(0, kbY, 0, kbY + blackH - 9);
-      top.addColorStop(0, light ? ink : '#1d1a18');
-      top.addColorStop(1, light ? darken(ink, 0.85) : '#2c2724');
-      ctx.fillStyle = top;
-      ctx.fillRect(kx + 2, kbY, kw - 4, blackH - 9);
-      ctx.fillStyle = light ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.12)';
-      ctx.fillRect(kx + 3, kbY + 2, 1.2, blackH - 14);
+  ctx.textAlign = 'left';
+  const labelled = new Set(lit.keys());
+  for (let p = lo; p <= hi; p++) {
+    const ly = rowY(p);
+    if (labelled.has(p)) {
+      ctx.fillStyle = GRAPHITE;
+      roundRect(ctx, x + 22, ly - 2.5, 22, 5, 2.5, true, false);
+      ctx.font = '700 11px "JetBrains Mono", monospace';
+      ctx.fillText(name(p), x + 50, ly + 0.5);
+    } else if (p % 12 === 0) {
+      ctx.fillStyle = hexToRgbaStr(GRAPHITE, 0.35);
+      ctx.font = '600 9px "JetBrains Mono", monospace';
+      ctx.fillText(name(p), x + 50, ly + 0.5);
     }
   }
+
+  // ---------- Chord written out ----------
+  // Sounding notes; otherwise the last onset group, faded, so the line never jumps to empty
+  let chord = active.map(n => n.note.midi);
+  let alpha = 1;
+  if (!chord.length) {
+    const played = notes.filter(n => n.relStart <= 0);
+    const last = played.reduce((m, n) => Math.max(m, n.relStart), -Infinity);
+    chord = played.filter(n => n.relStart >= last - 0.06).map(n => n.note.midi);
+    alpha = 0.4;
+  }
+  const text = chordText(chord, accidental, middleC);
+  if (text) {
+    const cy = y + h - 92;
+    ctx.font = '700 20px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = hexToRgbaStr(GRAPHITE, alpha);
+    ctx.fillText(text, x + w / 2, cy, w - 80);
+    const tw = Math.min(ctx.measureText(text).width, w - 80);
+    // Hand-drawn underline in the newest note's colour
+    const under = chord.length ? noteColor(chord[chord.length - 1]) : GRAPHITE;
+    ctx.strokeStyle = hexToRgbaStr(under, alpha * 0.9);
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(x + w / 2 - tw * 0.32, cy + 18);
+    ctx.quadraticCurveTo(x + w / 2, cy + 20.5, x + w / 2 + tw * 0.32, cy + 17.5);
+    ctx.stroke();
+  }
+
+  ctx.restore();
 }
 
-export default { draw: drawPianoWaterfall } satisfies ModeModule;
+export default { draw: drawGraphiteSynth } satisfies ModeModule;
