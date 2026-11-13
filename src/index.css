@@ -7,7 +7,7 @@
   body {
     background-color: rgb(var(--bg));
     color: rgb(var(--text));
-    font-family: 'Space Grotesk', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   }
   /* Keyboard focus never relies on border colour alone (§3.2) */
   :focus-visible {

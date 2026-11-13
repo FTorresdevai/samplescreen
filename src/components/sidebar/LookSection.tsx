@@ -54,7 +54,7 @@ export const LookSection: React.FC<LookSectionProps> = ({ settings, onUpdate, mi
                 >
                   <span className="flex items-baseline justify-between gap-2">
                     <span className="text-xs font-medium text-text">{mode.name}</span>
-                    <span className="shrink-0 font-mono text-[10px] uppercase text-subtle">{INPUT_TAG[mode.input]}</span>
+                    <span className="shrink-0 font-mono text-[10px] uppercase text-muted">{INPUT_TAG[mode.input]}</span>
                   </span>
                   <span className="block text-[11px] leading-snug text-muted">{mode.description}</span>
                 </button>

@@ -13,22 +13,22 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ onLoadDemo, onOpenExport, isExporting, isSidebarOpen, onToggleSidebar, exportBlockReason, viewSwitch }) => (
-  <header className="h-12 shrink-0 bg-surface-1 border-b border-line px-4 flex items-center justify-between z-30 select-none">
+  <header className="h-12 shrink-0 bg-surface-1 border-b border-line px-3 sm:px-4 flex items-center justify-between gap-2 z-30 select-none">
     {/* Wordmark links back to the landing page */}
-    <a href="./" className="font-serif text-2xl leading-none text-text rounded-sm" title="Back to the home page">
+    <a href="./" className="font-serif text-xl sm:text-2xl leading-none text-text rounded-sm shrink-0" title="Back to the home page">
       SampleScreen
     </a>
 
-    <div className="flex items-center gap-2">
-      {viewSwitch && <div className="w-32">{viewSwitch}</div>}
+    <div className="flex items-center gap-1.5 sm:gap-2 whitespace-nowrap">
+      {viewSwitch && <div className="w-24 sm:w-32">{viewSwitch}</div>}
       <button type="button" onClick={onLoadDemo} className={secondaryBtnCls} title="Load the 16-bar demo loop">
-        Load demo
+        <span className="sm:hidden">Demo</span><span className="hidden sm:inline">Load demo</span>
       </button>
       <button
         type="button"
         onClick={onOpenExport}
         disabled={isExporting || !!exportBlockReason}
-        className={secondaryBtnCls}
+        className={`${secondaryBtnCls} hidden sm:inline-flex`} /* phones: Export video sits in the controls panel */
         title={exportBlockReason ?? undefined}
       >
         Export

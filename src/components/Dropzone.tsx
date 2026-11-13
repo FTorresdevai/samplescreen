@@ -129,6 +129,7 @@ const DropBox: React.FC<DropBoxProps> = ({ kind, large, fileName, detail, onFile
         accept={accept}
         className="sr-only"
         tabIndex={-1}
+        aria-label={`${label} file`}
         onChange={(e) => {
           take(Array.from(e.target.files ?? []));
           e.target.value = ''; // allow picking the same file again
