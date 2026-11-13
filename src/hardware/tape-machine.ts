@@ -1,6 +1,5 @@
 import { roundRect } from '../shared/canvas-utils';
 import { consoleTheme } from './themes';
-import { getCachedImage } from '../shared/assets';
 import { AudioAnalysis } from '../types';
 
 export interface TapeMachineOptions {
@@ -10,10 +9,10 @@ export interface TapeMachineOptions {
 }
 
 /**
- * Studio Master Tape Machine (Photo-Based + Real Analog Mechanical Motion)
- * Renders the authentic Softube / Studer Tape Mark II hardware console
- * inside Slot 1 (w: 960, h: 570) with luxury chassis framing,
- * spinning NAB reel flanges in perspective, and ballistic analog VU needles.
+ * Studio Master Tape Machine, drawn entirely on the canvas (no photo):
+ * transport deck with spinning NAB reels in perspective, head block and guides,
+ * and a brushed front panel with ballistic VU meters, drive knob, type buttons and speed selector.
+ * Laid out in fractions of the slot (designed for w: 960, h: 570).
  */
 export function drawStudioTapeMachine(
   ctx: CanvasRenderingContext2D,
@@ -24,8 +23,6 @@ export function drawStudioTapeMachine(
   colorTheme: 'gold' | 'crimson' | string = 'gold',
   options?: TapeMachineOptions
 ) {
-  const tapeMachineImg = getCachedImage('images/tape_machine.jpg');
-
   ctx.save();
 
   const T = consoleTheme(colorTheme);
@@ -45,126 +42,275 @@ export function drawStudioTapeMachine(
   ctx.lineWidth = 1.8;
   roundRect(ctx, x, y, w, h, 10, false, true);
 
-  // 3. Inner Clipped Frame for the Photo & Mechanical Overlays
+  // 3. Inner clipped frame for the deck and front panel
   ctx.save();
   ctx.beginPath();
   roundRect(ctx, x + 2, y + 2, w - 4, h - 4, 8, false, false);
   ctx.clip();
 
-  if (tapeMachineImg && tapeMachineImg.complete && tapeMachineImg.naturalWidth > 0) {
-    const img = tapeMachineImg;
-    const imgAspect = img.naturalWidth / img.naturalHeight;
-    const targetAspect = w / h;
-    let sx = 0, sy = 0, sw = img.naturalWidth, sh = img.naturalHeight;
+  const time = options?.currentTime ?? 0;
+  const analysis = options?.analysis;
+  const bass = analysis?.bass ?? 0.2;
+  const rms = analysis?.rms ?? 0.2;
+  const fx = (f: number) => x + f * w;
+  const fy = (f: number) => y + f * h;
 
-    if (imgAspect > targetAspect) {
-      sw = img.naturalHeight * targetAspect;
-      sx = (img.naturalWidth - sw) / 2;
-    } else {
-      sh = img.naturalWidth / targetAspect;
-      sy = (img.naturalHeight - sh) / 2;
-    }
+  // A. Transport deck (top half): dark recess, back meter bridge, brushed deck plate
+  const deckBottom = fy(0.5);
+  const recess = ctx.createLinearGradient(x, y, x, deckBottom);
+  recess.addColorStop(0, '#07080b');
+  recess.addColorStop(0.3, '#15171d');
+  recess.addColorStop(1, '#2a2c31');
+  ctx.fillStyle = recess;
+  ctx.fillRect(x, y, w, deckBottom - y);
 
-    // A. Draw Base Photorealistic Console
-    ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
+  // Meter bridge at the back: a row of small amber windows with status LEDs
+  const bridgeH = h * 0.1;
+  ctx.fillStyle = '#0b0c10';
+  ctx.fillRect(x, y, w, bridgeH);
+  for (let i = 0; i < 8; i++) {
+    const wx = fx(0.08 + i * 0.108);
+    const ww = w * 0.08;
+    ctx.fillStyle = `rgba(214, 120, 28, ${0.55 + Math.min(0.3, rms * 0.4)})`;
+    roundRect(ctx, wx, y + bridgeH * 0.18, ww, bridgeH * 0.46, 2, true, false);
+    ctx.fillStyle = i % 3 === 0 ? '#2dd4bf' : '#134e4a';
+    ctx.beginPath();
+    ctx.arc(wx + 5, y + bridgeH * 0.82, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
-    // Helpers to convert image pixel coordinates to canvas space
-    const toCanvasX = (ix: number) => x + ((ix - sx) / sw) * w;
-    const toCanvasY = (iy: number) => y + ((iy - sy) / sh) * h;
-    const toCanvasW = (iw: number) => (iw / sw) * w;
-    const toCanvasH = (ih: number) => (ih / sh) * h;
+  // Deck plate seen from above (a tilted, lighter surface toward the front)
+  const plateTop = fy(0.2);
+  const plate = ctx.createLinearGradient(x, plateTop, x, deckBottom);
+  plate.addColorStop(0, '#3a3c41');
+  plate.addColorStop(1, '#6b6d72');
+  ctx.fillStyle = plate;
+  ctx.fillRect(x, plateTop, w, deckBottom - plateTop);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
+  ctx.fillRect(x, deckBottom - 3, w, 2);
 
-    const time = options?.currentTime ?? 0;
-    const analysis = options?.analysis;
-    const bass = analysis?.bass ?? 0.2;
-    const rms = analysis?.rms ?? 0.2;
+  // Reels: flange, wound tape pack, rotating cutouts and spindle
+  const reelY = fy(0.27);
+  const reelR = w * 0.17;
+  const reels: Array<{ cx: number; flange: [string, string]; spokes: [string, string, string]; pack: number; angle: number }> = [
+    { cx: fx(0.235), flange: ['#b91c1c', '#5f0d0d'], spokes: ['#991b1b', '#f87171', '#450a0a'], pack: 0.78, angle: time * 3.8 },
+    { cx: fx(0.765), flange: ['#e2e8f0', '#64748b'], spokes: ['#94a3b8', '#f8fafc', '#1e293b'], pack: 0.55, angle: time * 3.8 * 1.04 },
+  ];
+  for (const r of reels) {
+    ctx.save();
+    ctx.translate(r.cx, reelY);
+    ctx.scale(1, 0.44);
+    // Drop shadow on the deck
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.beginPath();
+    ctx.arc(6, 22, reelR, 0, Math.PI * 2);
+    ctx.fill();
+    // Flange
+    const fl = ctx.createLinearGradient(-reelR, -reelR, reelR, reelR);
+    fl.addColorStop(0, r.flange[0]);
+    fl.addColorStop(1, r.flange[1]);
+    ctx.fillStyle = fl;
+    ctx.beginPath();
+    ctx.arc(0, 0, reelR, 0, Math.PI * 2);
+    ctx.fill();
+    // Wound tape pack seen through the flange
+    ctx.fillStyle = 'rgba(38, 24, 16, 0.55)';
+    ctx.beginPath();
+    ctx.arc(0, 0, reelR * r.pack, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
 
-    // B. OVERLAY 1: DYNAMIC ROTATING NAB TAPE REELS (Supply & Take-up in perspective)
-    // Left Reel (Anodized Red) Center ~ (ix: 172, iy: 88)
-    const lReelX = toCanvasX(172);
-    const lReelY = toCanvasY(88);
-    // Right Reel (Brushed Silver) Center ~ (ix: 456, iy: 88)
-    const rReelX = toCanvasX(456);
-    const rReelY = toCanvasY(88);
-    const reelRadiusX = toCanvasW(92); // ~165px
+    drawRotatingReelSpokes(ctx, r.cx, reelY, reelR, r.angle, r.spokes[0], r.spokes[1], r.spokes[2]);
 
-    const rotSpeed = 3.8; // 15 IPS realistic spin
-    const leftAngle = time * rotSpeed;
-    const rightAngle = time * rotSpeed * 1.04;
+    // Spindle post and hub cap
+    const post = ctx.createLinearGradient(r.cx - 14, 0, r.cx + 14, 0);
+    post.addColorStop(0, '#6b7280');
+    post.addColorStop(0.45, '#e5e7eb');
+    post.addColorStop(1, '#4b5563');
+    ctx.fillStyle = post;
+    ctx.fillRect(r.cx - 14, reelY - 34, 28, 34);
+    ctx.fillStyle = '#d1d5db';
+    ctx.beginPath();
+    ctx.ellipse(r.cx, reelY - 34, 14, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
-    // Draw Left Reel Rotating Spoke Highlights & Cutouts
-    drawRotatingReelSpokes(ctx, lReelX, lReelY, reelRadiusX, leftAngle, '#991b1b', '#f87171', '#450a0a');
-    // Draw Right Reel Rotating Spoke Highlights & Cutouts
-    drawRotatingReelSpokes(ctx, rReelX, rReelY, reelRadiusX, rightAngle, '#94a3b8', '#f8fafc', '#1e293b');
+  // Tape path: reels -> guide rollers -> head block
+  const guideY = fy(0.4);
+  const guides = [fx(0.16), fx(0.35), fx(0.65), fx(0.84)];
+  ctx.strokeStyle = '#3b2416';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(reels[0].cx - reelR * 0.78, reelY);
+  ctx.lineTo(guides[0], guideY);
+  ctx.lineTo(guides[3], guideY);
+  ctx.lineTo(reels[1].cx + reelR * 0.55, reelY);
+  ctx.stroke();
+  for (const gx of guides) {
+    const roller = ctx.createLinearGradient(gx - 9, 0, gx + 9, 0);
+    roller.addColorStop(0, '#4b5563');
+    roller.addColorStop(0.5, '#f3f4f6');
+    roller.addColorStop(1, '#374151');
+    ctx.fillStyle = roller;
+    ctx.fillRect(gx - 9, guideY - 30, 18, 32);
+    ctx.fillStyle = '#9ca3af';
+    ctx.beginPath();
+    ctx.ellipse(gx, guideY - 30, 9, 3.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Head block cover
+  const headX = fx(0.4);
+  const headW = w * 0.2;
+  const head = ctx.createLinearGradient(0, guideY - 46, 0, guideY + 6);
+  head.addColorStop(0, '#d4d4d8');
+  head.addColorStop(0.5, '#8b8d93');
+  head.addColorStop(1, '#4b4d52');
+  ctx.fillStyle = head;
+  roundRect(ctx, headX, guideY - 46, headW, 52, 6, true, false);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+  ctx.lineWidth = 1;
+  roundRect(ctx, headX + 0.5, guideY - 45.5, headW - 1, 51, 6, false, true);
 
-    // C. OVERLAY 2: BALLISTIC ANALOG VU METERS WITH BOUNCING PHYSICAL NEEDLES
-    // Left VU Meter Face: ix: 78, iy: 196, iw: 114, ih: 67
-    const lVuX = toCanvasX(78);
-    const lVuY = toCanvasY(196);
-    const lVuW = toCanvasW(114);
-    const lVuH = toCanvasH(67);
+  // B. Front panel (bottom half): brushed metal with screws
+  const panelY = deckBottom;
+  const panel = ctx.createLinearGradient(x, panelY, x, y + h);
+  panel.addColorStop(0, '#5c5e63');
+  panel.addColorStop(0.5, '#47494e');
+  panel.addColorStop(1, '#2e3034');
+  ctx.fillStyle = panel;
+  ctx.fillRect(x, panelY, w, y + h - panelY);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.025)';
+  for (let ly = panelY + 4; ly < y + h; ly += 3) ctx.fillRect(x, ly, w, 1);
+  const screws: Array<[number, number]> = [[fx(0.02), panelY + 14], [fx(0.98), panelY + 14], [fx(0.02), y + h - 16], [fx(0.98), y + h - 16]];
+  for (const [sx, sy] of screws) {
+    ctx.fillStyle = '#1f2023';
+    ctx.beginPath();
+    ctx.arc(sx, sy, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#9ca3af';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(sx - 3, sy);
+    ctx.lineTo(sx + 3, sy);
+    ctx.stroke();
+  }
 
-    // Right VU Meter Face: ix: 216, iy: 196, iw: 114, ih: 67
-    const rVuX = toCanvasX(216);
-    const rVuY = toCanvasY(196);
-    const rVuW = toCanvasW(114);
-    const rVuH = toCanvasH(67);
+  // Engraved labels
+  ctx.fillStyle = '#e5e7eb';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '700 11px "JetBrains Mono", monospace';
+  ctx.fillText('LEVEL METER', fx(0.29), fy(0.565));
+  ctx.fillText('DRIVE', fx(0.645), fy(0.565));
+  ctx.fillText('TYPE', fx(0.79), fy(0.565));
+  ctx.fillText('SPEED', fx(0.915), fy(0.565));
+  ctx.font = '600 9px "JetBrains Mono", monospace';
+  ctx.fillText('LEFT', fx(0.164), fy(0.6));
+  ctx.fillText('RIGHT', fx(0.422), fy(0.6));
 
-    // Ballistic response calculation (Left = Kick / Sub dominant, Right = Master RMS)
-    const leftVuLevel = Math.min(1.15, Math.max(0, bass * 1.35 + rms * 0.35));
-    const rightVuLevel = Math.min(1.15, Math.max(0, rms * 1.25 + (analysis?.mid ?? 0.2) * 0.4));
+  // C. Ballistic VU meters in dark bezels
+  const vuY = fy(0.62);
+  const vuW = w * 0.214;
+  const vuH = h * 0.21;
+  const leftVuLevel = Math.min(1.15, Math.max(0, bass * 1.35 + rms * 0.35));
+  const rightVuLevel = Math.min(1.15, Math.max(0, rms * 1.25 + (analysis?.mid ?? 0.2) * 0.4));
+  const vus: Array<[number, number, string]> = [[fx(0.057), leftVuLevel, 'LEFT'], [fx(0.315), rightVuLevel, 'RIGHT']];
+  for (const [vx, level, label] of vus) {
+    ctx.fillStyle = '#111215';
+    roundRect(ctx, vx - 6, vuY - 6, vuW + 12, vuH + 12, 6, true, false);
+    drawDynamicVuFace(ctx, vx, vuY, vuW, vuH, level, label, bass);
+  }
 
-    drawDynamicVuFace(ctx, lVuX, lVuY, lVuW, lVuH, leftVuLevel, 'LEFT', bass);
-    drawDynamicVuFace(ctx, rVuX, rVuY, rVuW, rVuH, rightVuLevel, 'RIGHT', bass);
-
-    // D. OVERLAY 3: INCANDESCENT TYPE [A] BUTTON TUBE WARMTH
-    // Button [A] is located at ix: 398, iy: 218 in photo
-    const btnAX = toCanvasX(398);
-    const btnAY = toCanvasY(218);
-    const btnAW = toCanvasW(18);
-    const btnAH = toCanvasH(16);
-    if (bass > 0.55) {
-      const glowAlpha = Math.min(0.65, (bass - 0.45) * 1.5);
-      ctx.save();
-      ctx.fillStyle = `rgba(239, 68, 68, ${glowAlpha})`;
+  // D. Drive knob, type buttons (A lights with the bass) and speed selector
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  drawPanelKnob(ctx, fx(0.645), fy(0.73), w * 0.042, -0.3 + Math.min(0.25, rms * 0.3));
+  const btnW = w * 0.03;
+  const btnH = h * 0.06;
+  ['A', 'B', 'C'].forEach((label, i) => {
+    const bx = fx(0.79) - btnW / 2;
+    const by = fy(0.6 + i * 0.085);
+    const lit = i === 0 && bass > 0.45;
+    ctx.save();
+    ctx.fillStyle = lit ? '#ef4444' : '#5f0d0d';
+    if (lit) {
       ctx.shadowColor = '#ef4444';
       ctx.shadowBlur = 12;
-      roundRect(ctx, btnAX, btnAY, btnAW, btnAH, 3, true, false);
-      ctx.restore();
     }
+    roundRect(ctx, bx, by, btnW, btnH, 3, true, false);
+    ctx.restore();
+    ctx.fillStyle = lit ? '#fff7ed' : '#fca5a5';
+    ctx.font = '700 11px sans-serif';
+    ctx.fillText(label, bx + btnW / 2, by + btnH / 2 + 0.5);
+  });
+  drawPanelKnob(ctx, fx(0.915), fy(0.73), w * 0.042, 0);
+  ctx.fillStyle = '#d1d5db';
+  ctx.font = '600 8px "JetBrains Mono", monospace';
+  ctx.fillText('7.5', fx(0.87), fy(0.84));
+  ctx.fillText('15', fx(0.915), fy(0.625));
+  ctx.fillText('30', fx(0.96), fy(0.84));
 
-    // E. Subtle Glass Sheen Reflection across top half
-    const sheen = ctx.createLinearGradient(x, y, x + w, y + h * 0.45);
-    sheen.addColorStop(0, 'rgba(255, 255, 255, 0.08)');
-    sheen.addColorStop(0.5, 'rgba(255, 255, 255, 0.02)');
-    sheen.addColorStop(1, 'rgba(255, 255, 255, 0)');
-    ctx.fillStyle = sheen;
-    ctx.fillRect(x, y, w, h * 0.45);
+  // E. Badge strip
+  ctx.textAlign = 'left';
+  ctx.fillStyle = T.tapeLabel;
+  ctx.font = '800 26px sans-serif';
+  ctx.fillText('TAPE', fx(0.045), fy(0.93));
+  ctx.fillStyle = 'rgba(229, 231, 235, 0.7)';
+  ctx.font = '600 8px "JetBrains Mono", monospace';
+  ctx.fillText('TWO-TRACK MASTER RECORDER \u00b7 SERVO TRANSPORT', fx(0.16), fy(0.915));
+  ctx.fillText('15 IPS \u00b7 NAB', fx(0.16), fy(0.945));
 
-    // Bottom bezel glow
-    const themeGlow = ctx.createLinearGradient(x, y + h - 18, x, y + h);
-    themeGlow.addColorStop(0, 'rgba(0, 0, 0, 0)');
-    themeGlow.addColorStop(1, T.tapeGlow);
-    ctx.fillStyle = themeGlow;
-    ctx.fillRect(x, y + h - 18, w, 18);
-  } else {
-    // Dark metallic brushed fallback while photo loads
-    const fbGrad = ctx.createLinearGradient(x, y, x, y + h);
-    fbGrad.addColorStop(0, '#1c1f28');
-    fbGrad.addColorStop(0.5, '#12141c');
-    fbGrad.addColorStop(1, '#090a0f');
-    ctx.fillStyle = fbGrad;
-    ctx.fillRect(x, y, w, h);
+  // F. Subtle sheen across the deck and the theme glow on the bottom bezel
+  const sheen = ctx.createLinearGradient(x, y, x + w, y + h * 0.45);
+  sheen.addColorStop(0, 'rgba(255, 255, 255, 0.08)');
+  sheen.addColorStop(0.5, 'rgba(255, 255, 255, 0.02)');
+  sheen.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  ctx.fillStyle = sheen;
+  ctx.fillRect(x, y, w, h * 0.45);
 
-    ctx.font = '700 12px "JetBrains Mono", monospace';
-    ctx.fillStyle = T.tapeLabel;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('• TAPE MACHINE MARK II •', x + w / 2, y + h / 2);
-  }
+  const themeGlow = ctx.createLinearGradient(x, y + h - 18, x, y + h);
+  themeGlow.addColorStop(0, 'rgba(0, 0, 0, 0)');
+  themeGlow.addColorStop(1, T.tapeGlow);
+  ctx.fillStyle = themeGlow;
+  ctx.fillRect(x, y + h - 18, w, 18);
 
   ctx.restore(); // remove inner clip
   ctx.restore(); // remove chassis save
+}
+
+/** Chrome knob with a skirt of ticks; `turn` is the pointer angle in turns from 12 o'clock (-0.375 to 0.375). */
+function drawPanelKnob(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, turn: number) {
+  ctx.save();
+  ctx.strokeStyle = '#e5e7eb';
+  ctx.lineWidth = 1.2;
+  for (let i = 0; i <= 10; i++) {
+    const ang = (-0.75 + i * 0.15) * Math.PI - Math.PI / 2;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(ang) * (r + 5), cy + Math.sin(ang) * (r + 5));
+    ctx.lineTo(cx + Math.cos(ang) * (r + 10), cy + Math.sin(ang) * (r + 10));
+    ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+  ctx.beginPath();
+  ctx.arc(cx + 3, cy + 5, r, 0, Math.PI * 2);
+  ctx.fill();
+  const body = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.4, r * 0.1, cx, cy, r);
+  body.addColorStop(0, '#f9fafb');
+  body.addColorStop(0.55, '#9ca3af');
+  body.addColorStop(1, '#374151');
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  const pa = turn * Math.PI * 2 - Math.PI / 2;
+  ctx.strokeStyle = '#111827';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cx + Math.cos(pa) * r * 0.3, cy + Math.sin(pa) * r * 0.3);
+  ctx.lineTo(cx + Math.cos(pa) * r * 0.88, cy + Math.sin(pa) * r * 0.88);
+  ctx.stroke();
+  ctx.restore();
 }
 
 /**
