@@ -2,11 +2,48 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Design tokens (docs/architecture/design-system-review.md §3.1). RGB triplets so Tailwind alpha works. */
+:root {                       /* Dark Studio — shipped */
+  --bg:           20 17 19;   /* #141113 app background */
+  --surface-1:    26 22 24;   /* #1a1618 header, sidebar, modal */
+  --surface-2:    34 29 32;   /* #221d20 cards, segmented controls */
+  --well:         15 13 14;   /* #0f0d0e inputs, slider tracks, trim canvas */
+  --line:         46 38 41;   /* #2e2629 dividers */
+  --line-strong:  66 56 60;   /* #42383c selected card outline */
+  --text:        243 237 223; /* #f3eddf */
+  --text-muted:  168 159 145; /* #a89f91 labels, units */
+  --text-subtle: 138 129 116; /* #8a8174 shortcuts, disabled */
+  --accent:      230 157 69;  /* #e69d45 play, export, selection, focus */
+  --accent-ink:   20 17 19;   /* text on accent */
+  --success:     114 192 155; /* #72c09b */
+  --error:       224 109 103; /* #e06d67 */
+  --info:        140 179 214; /* #8cb3d6 */
+}
+[data-theme="paper"] {        /* Paper Atelier — defined, NOT shipped */
+  --bg: 244 242 236; --surface-1: 235 231 222; --surface-2: 225 220 209; --well: 225 220 209;
+  --line: 216 220 212; --line-strong: 184 190 178;
+  --text: 32 42 38; --text-muted: 87 95 90; --text-subtle: 118 126 118;
+  --accent: 36 88 71; --accent-ink: 244 242 236;
+  --success: 45 122 91; --error: 168 62 56; --info: 65 103 136;
+}
+
 @layer base {
   body {
-    background-color: #08090c;
-    color: #f4f4f5;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: rgb(var(--bg));
+    color: rgb(var(--text));
+    font-family: 'Space Grotesk', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  /* Keyboard focus never relies on border colour alone (§3.2) */
+  :focus-visible {
+    outline: 2px solid rgb(var(--accent));
+    outline-offset: 2px;
+  }
+  ::selection {
+    background-color: rgb(var(--accent));
+    color: rgb(var(--accent-ink));
+  }
+  input[type='range'] {
+    accent-color: rgb(var(--accent));
   }
 }
 
@@ -16,21 +53,12 @@
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #0f1015;
+  background: rgb(var(--well));
 }
 ::-webkit-scrollbar-thumb {
-  background: #27272a;
+  background: rgb(var(--line));
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #3f3f46;
-}
-
-/* Digital LED font styling */
-.font-led {
-  font-family: 'Orbitron', monospace;
-}
-
-.glow-red {
-  box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+  background: rgb(var(--line-strong));
 }

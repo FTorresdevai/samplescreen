@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Play, Pause, RotateCcw } from 'lucide-react';
 import { AudioManager } from '../engine/audio';
+import { Kbd } from './ui';
 
 interface PlaybackControlsProps {
   audioManager: AudioManager;
@@ -130,75 +131,57 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   }
 
   return (
-    <div className="h-16 bg-[#07080a] border-t border-white/[0.06] px-4 lg:px-8 flex flex-col justify-center gap-1.5 select-none z-20">
-      
-      {/* Scrub Slider */}
+    <div className="h-16 shrink-0 bg-surface-1 border-t border-line px-4 lg:px-8 flex flex-col justify-center gap-1.5 select-none z-20">
+      {/* Scrub slider */}
       <div className="flex items-center gap-3">
-        <span className="font-mono text-[11px] font-bold text-zinc-400 w-16 text-right">
-          {formatTime(currentTime)}
-        </span>
-
-        <div className="flex-1 relative flex items-center group">
-          <input
-            type="range"
-            min={0}
-            max={duration || 16}
-            step={0.01}
-            value={Math.min(currentTime, duration || 16)}
-            onPointerDown={handlePointerDown}
-            onPointerUp={handlePointerUp}
-            onChange={handleSeek}
-            className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-amber-400 group-hover:h-1.5 transition-all"
-          />
-        </div>
-
-        <span className="font-mono text-[11px] font-bold text-zinc-600 w-16">
-          {formatTime(duration || 16)}
-        </span>
+        <span className="font-mono text-[11px] text-muted w-16 text-right">{formatTime(currentTime)}</span>
+        <input
+          type="range"
+          min={0}
+          max={duration || 16}
+          step={0.01}
+          value={Math.min(currentTime, duration || 16)}
+          onPointerDown={handlePointerDown}
+          onPointerUp={handlePointerUp}
+          onChange={handleSeek}
+          className="flex-1 h-1 cursor-pointer"
+          aria-label="Playhead"
+        />
+        <span className="font-mono text-[11px] text-subtle w-16">{formatTime(duration || 16)}</span>
       </div>
 
-      {/* Control Buttons & Bar Info */}
-      <div className="flex items-center justify-between">
-        
-        {/* Left: Bar / Beat readout */}
-        <div className="flex items-center gap-2">
-          <span className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-[#0c0e14] border ${isIntro ? 'border-amber-500/40 text-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.25)]' : 'border-white/[0.06] text-zinc-300'}`}>
+      <div className="grid grid-cols-3 items-center">
+        {/* Bar / beat readout */}
+        <div className="flex items-center gap-3">
+          <span className={`font-mono text-[11px] px-2 py-0.5 rounded bg-well border ${isIntro ? 'border-accent text-accent' : 'border-line text-text'}`}>
             {barDisplay}
           </span>
-          <span className="text-[11px] font-mono text-zinc-600 hidden sm:inline">
-            [Space] Play/Pause • [R] Restart
-          </span>
+          <span className="hidden sm:inline text-[11px] text-subtle"><Kbd>Space</Kbd> play / pause</span>
         </div>
 
-        {/* Center: Play / Pause & Restart */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-center gap-2">
           <button
+            type="button"
             onClick={handleRestart}
-            className="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800 transition active:scale-95"
-            title="Restart Loop"
+            className="p-1.5 rounded text-muted hover:text-text hover:bg-surface-2 transition-colors"
+            title="Restart"
+            aria-label="Restart"
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </button>
-
           <button
+            type="button"
             onClick={togglePlay}
-            className="w-8 h-8 rounded-full bg-amber-400 hover:bg-amber-300 text-black flex items-center justify-center shadow-md shadow-amber-400/20 transition active:scale-95"
+            className="w-8 h-8 rounded-full border border-accent text-accent hover:bg-accent/10 flex items-center justify-center transition-colors"
             title={isPlaying ? 'Pause' : 'Play'}
+            aria-label={isPlaying ? 'Pause' : 'Play'}
           >
             {isPlaying ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current ml-0.5" />}
           </button>
         </div>
 
-        {/* Right: Loop Indicator */}
-        <div className="flex items-center gap-2">
-          <div className="text-[11px] font-mono font-bold text-zinc-500 flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-            <span className="uppercase tracking-wider">LOOP 60FPS</span>
-          </div>
-        </div>
-
+        <div className="text-right font-mono text-[11px] text-subtle">{bpm} <span className="uppercase">bpm</span></div>
       </div>
-
     </div>
   );
 };

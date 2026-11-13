@@ -1,6 +1,7 @@
 import React from 'react';
-import { Download, CheckCircle2, AlertCircle, X, Disc3 } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import { ExportProgress } from '../engine/exporter';
+import { secondaryBtnCls } from './ui';
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -8,9 +9,20 @@ interface ExportModalProps {
   progress: ExportProgress | null;
   downloadUrl: string | null;
   fileName: string;
+  bpm: number;
   error: string | null;
   onClose: () => void;
   onCancel: () => void;
+}
+
+const EXPORT_FPS = 60;
+
+/** `Bar N of M`, derived from the frame counter. */
+function barProgress(p: ExportProgress, bpm: number): string {
+  const framesPerBar = (60 / (bpm || 80)) * 4 * EXPORT_FPS;
+  const total = Math.max(1, Math.round(p.totalFrames / framesPerBar));
+  const current = Math.min(total, Math.floor(p.currentFrame / framesPerBar) + 1);
+  return `Bar ${current} of ${total}`;
 }
 
 export const ExportModal: React.FC<ExportModalProps> = ({
@@ -19,111 +31,87 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   progress,
   downloadUrl,
   fileName,
+  bpm,
   error,
   onClose,
   onCancel,
 }) => {
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 select-none">
-      <div className="w-full max-w-md bg-[#0a0c12] border border-white/[0.08] rounded-2xl shadow-2xl p-6 relative overflow-hidden">
-        
-        {/* Glow ambient background */}
-        <div className="absolute -top-24 -left-24 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-orange-500/10 rounded-full blur-3xl pointer-events-none" />
+  const format = fileName.toLowerCase().endsWith('.webm') ? 'WebM' : 'MP4';
+  const percent = Math.round(progress?.percent ?? 0);
 
-        {/* Close Button when done or error */}
-        {(!isExporting || error) && (
+  return (
+    <div className="fixed inset-0 z-50 bg-bg/90 flex items-center justify-center p-4 select-none" role="dialog" aria-modal="true" aria-label="Export">
+      <div className="w-full max-w-sm bg-surface-1 border border-line rounded-lg p-6 relative">
+        {!isExporting && (
           <button
+            type="button"
             onClick={onClose}
-            className="absolute top-4 right-4 p-1 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800 transition"
+            className="absolute top-3 right-3 p-1 rounded text-muted hover:text-text hover:bg-surface-2 transition-colors"
+            aria-label="Close"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         )}
 
-        <div className="text-center space-y-4">
-          
-          {/* Header Icon */}
-          <div className="w-14 h-14 mx-auto rounded-2xl bg-[#0e1118] border border-white/[0.08] flex items-center justify-center shadow-lg">
-            {downloadUrl ? (
-              <CheckCircle2 className="w-8 h-8 text-amber-400 animate-bounce" />
-            ) : error ? (
-              <AlertCircle className="w-8 h-8 text-rose-500" />
-            ) : (
-              <Disc3 className="w-8 h-8 text-amber-400 animate-[spin_3s_linear_infinite]" />
-            )}
-          </div>
-
-          <div>
-            <h2 className="text-base font-mono font-bold text-white uppercase tracking-wider">
-              {downloadUrl
-                ? 'Export Complete!'
-                : error
-                ? 'Export Error'
-                : 'Rendering 1080×1920 MP4'}
-            </h2>
-            <p className="text-xs text-zinc-400 mt-1 font-mono">
-              {downloadUrl
-                ? 'Your 60 FPS vertical video is ready for Instagram Reels, TikTok, and YouTube Shorts.'
-                : error
-                ? error
-                : progress?.status || 'Encoding frames with 0 frame drops...'}
-            </p>
-          </div>
-
-          {/* Progress Bar (During Export) */}
-          {isExporting && progress && (
-            <div className="space-y-3 pt-2">
-              <div className="w-full h-2.5 bg-zinc-900 rounded-full overflow-hidden border border-white/[0.06] p-0.5">
-                <div
-                  className="h-full bg-amber-400 rounded-full transition-all duration-150 shadow-sm shadow-amber-400/50"
-                  style={{ width: `${progress.percent}%` }}
-                />
-              </div>
-
-              <div className="flex justify-between items-center text-[11px] font-mono text-zinc-400 px-1">
-                <span className="font-bold text-amber-300">{progress.percent}%</span>
-                <span>
-                  {progress.currentFrame} / {progress.totalFrames} frames
-                </span>
-                <span>{progress.fps} FPS</span>
-                <span>ETA: {progress.etaSeconds}s</span>
-              </div>
+        {downloadUrl ? (
+          <div className="space-y-5">
+            <div className="flex items-center gap-3">
+              <Check className="w-5 h-5 text-success" aria-hidden />
+              <h2 className="font-serif text-4xl leading-none text-text">Ready</h2>
             </div>
-          )}
-
-          {/* Action Buttons */}
-          <div className="pt-3 flex flex-col gap-2">
-            {downloadUrl ? (
+            <p className="font-mono text-[11px] text-muted break-all">{fileName}</p>
+            <div className="flex flex-col gap-2">
               <a
                 href={downloadUrl}
                 download={fileName}
-                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold text-xs font-mono uppercase bg-amber-400 hover:bg-amber-300 text-black shadow-lg shadow-amber-400/25 transition active:scale-95"
+                className="rounded-md bg-accent px-4 py-2.5 text-center text-sm font-medium text-accent-ink transition-colors hover:bg-accent/90"
               >
-                <Download className="w-4 h-4" />
-                <span>Download {fileName}</span>
+                Download {format}
               </a>
-            ) : isExporting ? (
-              <button
-                onClick={onCancel}
-                className="w-full py-2.5 rounded-xl text-xs font-mono font-semibold text-zinc-400 hover:text-white bg-[#0e1118] hover:bg-zinc-800 border border-white/[0.06] transition"
-              >
-                Cancel Export
+              <button type="button" onClick={onClose} className="py-1.5 text-xs text-muted hover:text-text underline underline-offset-2">
+                Keep editing
               </button>
-            ) : (
-              <button
-                onClick={onClose}
-                className="w-full py-2.5 rounded-xl text-xs font-mono font-semibold text-white bg-zinc-800 hover:bg-zinc-700 transition"
-              >
-                Dismiss
-              </button>
-            )}
+            </div>
           </div>
+        ) : error ? (
+          <div className="space-y-4">
+            <h2 className="text-sm font-medium text-error">Export failed</h2>
+            <p className="text-xs text-muted leading-relaxed">{error}</p>
+            <button type="button" onClick={onClose} className={`${secondaryBtnCls} w-full`}>
+              Close
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <h2 className="text-sm font-medium text-text">
+              Rendering <span className="font-mono">1080×1920 · 60 fps</span>
+            </h2>
 
-        </div>
+            <div className="font-mono text-2xl text-text" aria-live="off">{percent}%</div>
+            <div
+              className="w-full h-2 bg-well rounded-full overflow-hidden"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={percent}
+            >
+              <div className="h-full bg-accent transition-[width] duration-150" style={{ width: `${percent}%` }} />
+            </div>
 
+            <div className="flex justify-between font-mono text-[11px] text-muted">
+              <span>{progress ? barProgress(progress, bpm) : 'Preparing'}</span>
+              <span>{progress && progress.etaSeconds > 0 ? `About ${Math.ceil(progress.etaSeconds)} s left` : ''}</span>
+            </div>
+
+            <p className="text-[11px] text-subtle">Rendered on this device. Nothing is uploaded.</p>
+
+            <button type="button" onClick={onCancel} className={`${secondaryBtnCls} w-full`}>
+              Cancel
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

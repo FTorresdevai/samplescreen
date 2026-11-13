@@ -5,7 +5,7 @@ const manifest: ModeManifest = {
   name: 'DAW Linear Roll',
   kind: 'standalone',
   input: 'midi',
-  description: 'Traditional horizontal studio visualizer with grid and bar markers.',
+  description: 'Horizontal piano roll with a bar grid.',
 };
 
 export default manifest;

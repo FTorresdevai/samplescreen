@@ -63,15 +63,20 @@ export const TrimWaveform: React.FC<TrimWaveformProps> = ({ buffer, bpm, startBa
     ctx.fillStyle = `${accentColor}22`;
     ctx.fillRect(x0, 0, x1 - x0, HEIGHT);
 
-    // Bar grid
-    ctx.fillStyle = 'rgba(255,255,255,0.06)';
-    for (let b = 1; b <= totalBars + 1; b++) ctx.fillRect(Math.round(barToX(b)), 0, 1, HEIGHT);
+    // Bar grid, with ruler ticks along the bottom edge
+    for (let b = 1; b <= totalBars + 1; b++) {
+      const x = Math.round(barToX(b));
+      ctx.fillStyle = 'rgba(243,237,223,0.06)';
+      ctx.fillRect(x, 0, 1, HEIGHT);
+      ctx.fillStyle = 'rgba(168,159,145,0.7)';
+      ctx.fillRect(x, HEIGHT - 6, 1, 6);
+    }
 
     // Peaks: muted outside the selection, accent inside
     if (peaks) {
       for (let px = 0; px < width; px++) {
         const amp = Math.max(1, peaks[px] * (mid - 4));
-        ctx.fillStyle = px >= x0 && px <= x1 ? accentColor : 'rgba(161,161,170,0.45)';
+        ctx.fillStyle = px >= x0 && px <= x1 ? accentColor : 'rgba(168,159,145,0.45)';
         ctx.fillRect(px, mid - amp, 1, amp * 2);
       }
     }
@@ -120,13 +125,13 @@ export const TrimWaveform: React.FC<TrimWaveformProps> = ({ buffer, bpm, startBa
       <canvas
         ref={canvasRef}
         style={{ width: '100%', height: HEIGHT, touchAction: 'none' }}
-        className={`block rounded-md bg-black/40 ${buffer ? 'cursor-ew-resize' : 'opacity-40'}`}
+        className={`block rounded-md bg-well border border-line ${buffer ? 'cursor-ew-resize' : 'opacity-40'}`}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       />
-      <p className="font-mono text-[10px] text-zinc-400">
+      <p className="inline-block rounded bg-well border border-line px-2 py-1 font-mono text-[10px] text-text">
         {buffer
           ? `Bars ${sel.start}–${sel.end - 1} · ${formatClock(t0)}–${formatClock(t1)}`
           : 'Load an audio file to trim it.'}

@@ -3,7 +3,7 @@ import { Header } from './components/Header';
 import { Dropzone } from './components/Dropzone';
 import { CanvasPreview } from './components/CanvasPreview';
 import { PlaybackControls } from './components/PlaybackControls';
-import { CustomizationSidebar } from './components/CustomizationSidebar';
+import { Sidebar } from './components/sidebar/Sidebar';
 import { ExportModal } from './components/ExportModal';
 import { CanvasRenderer } from './engine/renderer';
 import { audioManager } from './engine/audio';
@@ -200,7 +200,7 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleAudioSelected = async (file: File) => {
+  const handleAudioSelected = async (file: File, midiFollows = false) => {
     const validation = validateAudioFile(file);
     if (!validation.valid) {
       alert(`Audio Rejected: ${validation.error}`);
@@ -223,7 +223,7 @@ export const App: React.FC = () => {
       const defaultBars = Math.min(16, totalBars);
 
       // If producer has not loaded a custom MIDI yet, switch to Waveform Mode
-      const isCustomMidi = midiSource === 'file';
+      const isCustomMidi = midiSource === 'file' && !midiFollows;
       let activeMidi = midiData;
       let activeIntro = introMidiData;
 
@@ -343,7 +343,8 @@ export const App: React.FC = () => {
         isAudioTrimmed: false,
         albumView: 'midi', // loading a MIDI file switches albums to the MIDI view
       }));
-      if (audioSource === 'demo') {
+      // Asked from the engine, not React state: audio and MIDI can be dropped together
+      if (!audioManager.isCustomAudio()) {
         audioManager.generateCombinedAudioBuffer(
           settings.enableIntro ? introMidiData : null,
           parsed,
@@ -355,6 +356,15 @@ export const App: React.FC = () => {
       console.error('Failed to parse MIDI file:', err);
       alert('Unable to process MIDI file. Please ensure it is a valid .mid file.');
     }
+  };
+
+  /** Files from the dropzone: audio first, then MIDI, so a pair dropped together ends in the MIDI view. */
+  const handleFilesSelected = async (files: File[]) => {
+    const isMidi = (f: File) => /\.midi?$/i.test(f.name);
+    const audio = files.find((f) => !isMidi(f));
+    const midi = files.find(isMidi);
+    if (audio) await handleAudioSelected(audio, !!midi);
+    if (midi) await handleMidiSelected(midi);
   };
 
   const handleIntroMidiSelected = async (file: File) => {
@@ -469,13 +479,13 @@ export const App: React.FC = () => {
     }
   }, [totalPlaybackDuration, settings.isAudioTrimmed]);
 
+  const isDemo = audioSource === 'demo' && midiSource === 'demo';
+
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#060709]">
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-bg">
       
       {/* 1. Header Bar */}
       <Header
-        settings={settings}
-        onUpdateSettings={handleUpdateSettings}
         onLoadDemo={handleLoadDemo}
         onOpenExport={handleStartExport}
         isExporting={isExporting}
@@ -489,29 +499,31 @@ export const App: React.FC = () => {
         {/* Left / Center Area */}
         <div className="flex-1 flex flex-col min-w-0">
           
-          {/* Top Dropzone */}
-          <div className="p-2.5 bg-[#07080a] border-b border-white/[0.06]">
-            <Dropzone
-              onAudioSelected={handleAudioSelected}
-              onMidiSelected={handleMidiSelected}
-              audioFileName={audioFileName}
-              midiFileName={midiFileName}
+          {/* First screen: large dropzone beside the demo preview. With a file loaded it shrinks to a strip. */}
+          <div className={`flex-1 min-h-0 flex flex-col ${isDemo ? 'lg:flex-row' : ''}`}>
+            <div className={isDemo ? 'shrink-0 lg:w-[24rem] flex items-center p-4 lg:p-8 lg:pr-0' : 'shrink-0 p-2.5 border-b border-line bg-surface-1'}>
+              <Dropzone
+                onFilesSelected={handleFilesSelected}
+                isDemo={isDemo}
+                audioFileName={audioFileName}
+                midiFileName={midiFileName}
+                midiData={midiData}
+                detectedAudioInfo={detectedAudioInfo}
+              />
+            </div>
+
+            {/* Canvas 9:16 video preview */}
+            <CanvasPreview
+              rendererRef={rendererRef}
+              canvasRef={canvasRef}
+              audioManager={audioManager}
               midiData={midiData}
-              detectedAudioInfo={detectedAudioInfo}
+              introMidiData={introMidiData}
+              settings={settings}
+              onUpdateSettings={handleUpdateSettings}
+              isExporting={isExporting}
             />
           </div>
-
-          {/* Canvas 9:16 Video Preview Viewport with Direct In-Place Text Editor */}
-          <CanvasPreview
-            rendererRef={rendererRef}
-            canvasRef={canvasRef}
-            audioManager={audioManager}
-            midiData={midiData}
-            introMidiData={introMidiData}
-            settings={settings}
-            onUpdateSettings={handleUpdateSettings}
-            isExporting={isExporting}
-          />
 
           {/* Bottom Playback Controls */}
           <PlaybackControls
@@ -525,13 +537,13 @@ export const App: React.FC = () => {
         </div>
 
         {/* Right Customization Sidebar */}
-        <CustomizationSidebar
+        <Sidebar
           settings={settings}
           onUpdate={handleUpdateSettings}
           isOpen={isSidebarOpen}
           onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
           onExport={handleStartExport}
-          introMidiData={introMidiData}
+          isExporting={isExporting}
           introMidiFileName={introMidiFileName}
           onIntroMidiSelected={handleIntroMidiSelected}
           onLoadDemoIntro={handleLoadDemoIntro}
@@ -551,6 +563,7 @@ export const App: React.FC = () => {
         progress={exportProgress}
         downloadUrl={exportDownloadUrl}
         fileName={exportFileName}
+        bpm={settings.bpm}
         error={exportError}
         onClose={handleCloseExport}
         onCancel={handleCancelExport}

@@ -6,7 +6,7 @@ const manifest: ModeManifest = {
   kind: 'standalone',
   input: 'audio',
   hardware: 'tape-machine',
-  description: 'Chromatic solar halo with reactive shockwaves and harmonic rings.',
+  description: 'Audio-reactive halo over a tape machine. Audio only.',
   palette: { notesColor: '#f43f5e', circleColor: '#3b1c4e', bgColor: '#170f24', accentColor: '#fde047', glowColor: '#ec4899' },
 };
 

@@ -5,7 +5,7 @@ const manifest: ModeManifest = {
   name: 'Polar Sequencer',
   kind: 'standalone',
   input: 'midi',
-  description: '360-degree vinyl turntable with rotating playhead needle and center orb.',
+  description: 'Notes on a rotating disc with a playhead needle.',
 };
 
 export default manifest;
