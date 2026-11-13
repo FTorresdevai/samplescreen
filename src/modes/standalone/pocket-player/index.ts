@@ -159,7 +159,7 @@ function pitchRange(notes: MidiNote[]): { lo: number; hi: number } {
 
 // ---------- drawing helpers ----------
 
-function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+export function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   const k = Math.max(0, Math.min(r, w / 2, h / 2));
   ctx.beginPath();
   ctx.moveTo(x + k, y);
@@ -170,7 +170,7 @@ function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: n
   ctx.closePath();
 }
 
-function fitText(ctx: CanvasRenderingContext2D, text: string, maxW: number): string {
+export function fitText(ctx: CanvasRenderingContext2D, text: string, maxW: number): string {
   if (ctx.measureText(text).width <= maxW) return text;
   let lo = 0;
   let hi = text.length;
@@ -181,7 +181,7 @@ function fitText(ctx: CanvasRenderingContext2D, text: string, maxW: number): str
   return text.slice(0, lo).trimEnd() + '…';
 }
 
-function rgba(rgb: string, a: number): string {
+export function rgba(rgb: string, a: number): string {
   return rgb.replace('rgb(', 'rgba(').replace(')', `, ${a})`);
 }
 
